@@ -205,7 +205,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.2.1 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.2.2 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -450,14 +450,36 @@ function openPasteDialog() {
   pasteArea.focus();
 }
 $("#pasteDlgClose").onclick = () => pasteDlg.classList.add("hidden");
-$("#pasteGo").onclick = () => {
+function pasteFromDialog() {
   if (!pasteArea.value.trim()) { pasteArea.focus(); return; }
   pasteDlg.classList.add("hidden");
   sendClipboard({ getData: () => "", text: pasteArea.value });
-};
+}
+$("#pasteGo").onclick = pasteFromDialog;
+// вставили в поле системным «Вставить» — сразу разбираем, без лишней кнопки
+pasteArea.addEventListener("paste", (e) => {
+  const text = e.clipboardData && e.clipboardData.getData("text/plain");
+  if (text && text.trim()) {
+    e.preventDefault();
+    pasteArea.value = text;
+    pasteFromDialog();
+  }
+});
 
 $("#pasteBtn").onclick = async (e) => {
   e.stopPropagation(); // не открывать диалог выбора файла
+  // в приложении буфер читается штатными средствами телефона (плагин Clipboard)
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    try {
+      const { type, value } = await window.Capacitor.Plugins.Clipboard.read();
+      if (value && value.trim()) {
+        return sendClipboard(type === "text/html"
+          ? { getData: (m) => (m === "text/html" ? value : ""), text: "" }
+          : { getData: () => "", text: value });
+      }
+    } catch (err) { /* пусто или нет доступа — поле для ручной вставки */ }
+    return openPasteDialog();
+  }
   try {
     const items = await navigator.clipboard.read();
     for (const it of items) {
