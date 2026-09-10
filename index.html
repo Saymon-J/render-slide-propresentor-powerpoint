@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="theme-color" content="#2b2b2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Слайды проповеди">
+<title>render-slide-propresentor-powerpoint</title>
+<style>
+  /* Дизайн по образцу ProPresenter 7: тёмные панели, тонкие границы,
+     синий акцент, капс-заголовки панелей, тонкие линейные иконки. */
+  :root {
+    --bg: #2b2b2b;          /* канва */
+    --panel: #3a3a3a;       /* панели */
+    --panel2: #333333;      /* карточки */
+    --line: #222222;        /* границы */
+    --ink: #e8e8e8;         /* основной текст */
+    --muted: #999999;       /* подписи */
+    --accent: #4a90d9;      /* синий акцент */
+    --accent-dark: #3a7bb8;
+    --sel: #4a4a4a;         /* выделение строки/кнопки */
+    --danger: #e04040;
+    --folder: #f0a030;      /* жёлтая папка, как в библиотеке PP7 */
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  /* ---------- верхний тулбар ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 0 16px; height: 56px; position: sticky; top: 0; z-index: 5;
+  }
+  .topbar .logo { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+  .topbar .logo .txt b { display: block; font-size: 14px; font-weight: 600; }
+  .topbar .logo .txt span { display: block; font-size: 10px; color: var(--muted); }
+  .topbar .badge {
+    margin-left: auto; font-size: 10px; color: var(--muted);
+    border: 1px solid var(--line); background: var(--panel2);
+    border-radius: 10px; padding: 3px 10px;
+  }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 18px 16px 96px; }
+
+  /* ---------- панели с капс-заголовками, как в PP7 ---------- */
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .panel > .phead {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid var(--line);
+  }
+  .panel > .phead .cap {
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  .panel > .phead .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+
+  /* ---------- зона загрузки ---------- */
+  .drop .dz {
+    padding: 34px 20px; text-align: center; cursor: pointer;
+    transition: background .12s;
+  }
+  .drop .dz:hover, .drop.over .dz { background: #404040; }
+  .drop .dz .big { font-size: 14px; font-weight: 600; margin-top: 10px; }
+  .drop .hint { color: var(--muted); margin-top: 5px; font-size: 12px; }
+  .drop .hint b { color: var(--ink); }
+  .drop .hint.hidden, #dropStatus.hidden { display: none; }
+  .drop #dropStatus { display: block; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .drop.err { border-color: var(--danger); }
+  .drop.err #dropStatus { color: #f0a0a0; }
+
+  /* ---------- кнопки ---------- */
+  button {
+    font: inherit; color: var(--ink); cursor: pointer;
+    background: var(--sel); border: 1px solid transparent; border-radius: 5px;
+    padding: 7px 14px; display: inline-flex; align-items: center; gap: 7px;
+  }
+  button:hover { background: #525252; }
+  button.primary { background: var(--accent); }
+  button.primary:hover { background: var(--accent-dark); }
+  button:disabled { opacity: .55; cursor: default; }
+  button svg { flex-shrink: 0; }
+  .iconbtn { padding: 5px 7px; background: transparent; }
+  .iconbtn:hover { background: var(--sel); }
+
+  /* ---------- поле названия ---------- */
+  .bar { display: flex; gap: 10px; align-items: center; padding: 10px 12px; flex-wrap: wrap; }
+  .bar label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #titleInput {
+    flex: 1; min-width: 260px; padding: 7px 10px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
+  }
+  #titleInput:focus { outline: 1px solid var(--accent); }
+  #meta { font-size: 11px; color: var(--muted); padding: 0 12px 8px; }
+
+  /* ---------- сетка карточек ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; padding: 12px; }
+  .slidecard {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .slidecard:hover { border-color: var(--sel); }
+  .slidecard.off { opacity: .4; }
+  .slidecard .head { display: flex; align-items: center; gap: 7px; }
+  .slidecard .head input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); }
+  .slidecard .head .lbl {
+    flex: 1; font-weight: 600; font-size: 12.5px; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .slidecard .head .lbl input { width: 100%; font: inherit; border: none; background: transparent; color: var(--ink); }
+  .slidecard .head .lbl input:focus { outline: 1px solid var(--accent); }
+  .del {
+    border: none; background: none; color: #777; font-size: 17px; line-height: 1;
+    padding: 1px 6px; cursor: pointer; border-radius: 4px;
+  }
+  .del:hover { color: var(--danger); background: #4a3232; }
+
+  /* превью слайда 16:9 — как выходной монитор PP7 */
+  .prev {
+    position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
+    border: 1px solid var(--line); border-radius: 4px; overflow: hidden; user-select: none;
+  }
+  .prev .ref {
+    position: absolute; top: 2.5%; left: 2%; width: 96%; padding-left: 2.6%;
+    text-align: left; color: #fff; font-weight: 700;
+    font-size: clamp(10px, 2.4vw, 15px);
+    font-family: Arial, sans-serif; white-space: nowrap;
+  }
+  .prev .bodybox {
+    position: absolute; top: 13%; left: 2%; width: 96%; height: 84%;
+    padding: 2.2% 2.6%;
+    color: #fff; font-family: Arial, sans-serif; font-size: clamp(8px, 1.75vw, 12px);
+    line-height: 1.32; overflow: hidden;
+  }
+  .prev .bodybox p { margin: 0 0 .45em; }
+  .prev mark { background: #ffe100; color: #000; }
+  .prev .empty { color: #9aa3b5; font-style: italic; }
+  .prev:focus-within { outline: 1px solid var(--accent); }
+
+  /* ---------- нижний тулбар ---------- */
+  .toolbar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding: 9px 16px; display: flex; justify-content: flex-end; gap: 8px; align-items: center;
+  }
+  .toolbar .tip { color: var(--muted); font-size: 11px; margin-right: auto; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .seg button { background: transparent; border: none; border-radius: 0; padding: 5px 10px; font-size: 12px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); }
+  .spinner {
+    width: 13px; height: 13px; border: 2px solid #77a5dd; border-top-color: #fff;
+    border-radius: 50%; display: inline-block; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+
+  /* ---------- мобильная адаптация ---------- */
+  @media (max-width: 640px) {
+    .topbar { height: auto; min-height: 48px; flex-wrap: wrap; padding: 6px 12px; gap: 8px; }
+    .topbar .txt span { display: none; }
+    .topbar .badge { font-size: 9px; padding: 2px 8px; }
+    main { padding: 12px 10px 130px; }
+    .drop .dz { padding: 24px 12px; }
+    .grid { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+    .slidecard { padding: 8px; gap: 6px; }
+    .toolbar {
+      flex-wrap: wrap; justify-content: center; gap: 6px;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    .toolbar .tip { display: none; }
+    .toolbar button { padding: 9px 12px; font-size: 12px; }
+    .seg { width: 100%; justify-content: stretch; }
+    .seg button { flex: 1; padding: 9px 6px; }
+    button { min-height: 44px; }
+    .del { min-height: 36px; min-width: 36px; font-size: 19px; }
+    .bar { padding: 8px 10px; }
+    #titleInput { min-width: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">
+    <!-- сетка слайдов как у ProPresenter -->
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="10" height="8" rx="1.5" stroke="#4a90d9" stroke-width="1.6"/>
+      <rect x="14.5" y="1.5" width="10" height="8" rx="1.5" stroke="#f0a030" stroke-width="1.6"/>
+      <rect x="1.5" y="12" width="10" height="8" rx="1.5" stroke="#777" stroke-width="1.6"/>
+      <rect x="14.5" y="12" width="10" height="8" rx="1.5" stroke="#777" stroke-width="1.6"/>
+      <rect x="6" y="22.5" width="14" height="2" rx="1" fill="#4a90d9"/>
+    </svg>
+    <div class="txt">
+      <b>render-slide-propresentor-powerpoint</b>
+      <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
+    </div>
+  </div>
+  <span class="badge">v1.2.0 · ProPresenter 7 + PowerPoint</span>
+</header>
+
+<main>
+  <div id="drop" class="panel drop">
+    <div class="phead">
+      <span class="cap">Загрузка конспекта</span>
+      <span class="right">
+        <button id="pasteBtn" type="button" title="Вставить текст из буфера обмена">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="3" y="3" width="10" height="11" rx="1.5" stroke="#ccc" stroke-width="1.4"/>
+            <rect x="5.5" y="1.5" width="5" height="3" rx="1" stroke="#ccc" stroke-width="1.4" fill="#3a3a3a"/>
+            <path d="M5.5 7.5h5M5.5 10h5" stroke="#ccc" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          Из буфера
+        </button>
+      </span>
+    </div>
+    <div class="dz" id="dz">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 16V4m0 0l-4 4m4-4l4 4" stroke="#4a90d9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="#888" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <div class="big">Перетащите конспект сюда или нажмите для выбора файла</div>
+      <div class="hint">.docx · .txt — ссылки вида «Ин 3:16-21» станут слайдами</div>
+      <div class="hint"><b>Ctrl+V</b> — вставить из буфера (копируйте из Word — выделения сохранятся)</div>
+      <span id="dropStatus" class="hidden"></span>
+    </div>
+  </div>
+  <input type="file" id="file" accept=".docx,.txt" class="hidden">
+
+  <div id="work" class="panel hidden">
+    <div class="phead"><span class="cap">Предпросмотр слайдов</span></div>
+    <div class="bar">
+      <label for="titleInput">Название проповеди (титульный слайд):</label>
+      <input id="titleInput" type="text" placeholder="Название проповеди…">
+    </div>
+    <div id="meta"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</main>
+
+<div class="toolbar hidden" id="toolbar">
+  <span class="tip">Снимите галочку, чтобы исключить слайд · × удаляет · текст правится прямо в превью</span>
+  <div class="seg" id="layoutSeg" title="Раскладка стихов в теле слайда">
+    <button type="button" data-l="flow">Стихи в строку</button>
+    <button type="button" data-l="lines">Каждый стих с новой строки</button>
+  </div>
+  <button id="addBtn">
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true">
+      <path d="M7 2v10M2 7h10" stroke="#ccc" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    Добавить отрывки
+  </button>
+  <button id="againBtn">
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M12 7A5 5 0 1 1 7 2c1.8 0 3.4 1 4.3 2.4" stroke="#ccc" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M11.6 1.8v2.8H8.8" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Другой конспект
+  </button>
+  <button id="exportPptxBtn">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="12" rx="1.5" stroke="#ccc" stroke-width="1.8"/>
+      <path d="M10 20h4M12 16v4" stroke="#ccc" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M7.5 11.5l2.5-3 2 2.5 2-3.5 2.5 4" stroke="#4a90d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Скачать PowerPoint (.pptx)
+  </button>
+  <button id="exportBtn" class="primary">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 4v12m0 0l-4-4m4 4l4-4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 17v1.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V17" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    Скачать ProPresenter (.pro)
+  </button>
+</div>
+
+<script src="./vendor/jszip.min.js"></script>
+<script src="./vendor/protobuf.min.js"></script>
+<script src="./vendor/pptxgen.bundle.js"></script>
+<script type="module">
+import * as api from "./js/api.js";
+const $ = (s) => document.querySelector(s);
+let state = { title: "", passages: [] };
+let addMode = false; // режим добавления: новые отрывки — в конец списка
+let layout = localStorage.getItem("layout") || "flow"; // flow | lines
+
+const layoutSeg = $("#layoutSeg");
+function setSeg() {
+  layoutSeg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.l === layout));
+}
+setSeg();
+layoutSeg.onclick = async (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.dataset.l === layout) return;
+  layout = b.dataset.l;
+  localStorage.setItem("layout", layout);
+  setSeg();
+  if (!state.passages.length) return;
+  try {
+    const j = await api.relayout({ layout, passages: state.passages });
+    state.passages = j.passages;
+    render();
+  } catch (err) { alert("Не удалось переложить стихи: " + err.message); }
+};
+
+const drop = $("#drop"), fileInput = $("#file");
+$("#dz").onclick = () => fileInput.click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); };
+fileInput.onchange = () => { if (fileInput.files[0]) upload(fileInput.files[0]); };
+
+function status(msg, isErr) {
+  const el = $("#dropStatus");
+  el.textContent = msg || "";
+  el.classList.toggle("hidden", !msg);
+  drop.classList.toggle("err", !!isErr);
+}
+
+function ingest(j) {
+  if (addMode) {
+    state.passages.push(...j.passages);
+    addMode = false;
+    $("#addBtn").classList.remove("primary");
+  } else {
+    state = j;
+  }
+  status("", false);
+  drop.classList.add("hidden");
+  render();
+}
+
+async function upload(file) {
+  status("Читаю конспект…", false);
+  try {
+    ingest(await api.parseFile(file, layout));
+  } catch (e) {
+    status(e.message || "Не удалось разобрать файл", true);
+  }
+}
+
+/* ---------- вставка из буфера ---------- */
+const NAMED = { yellow: "FFFF00", red: "FF0000", green: "008000", blue: "0000FF",
+                magenta: "FF00FF", cyan: "00FFFF", gray: "808080", lime: "00FF00" };
+
+function colorFromCss(v) {
+  if (!v) return null;
+  v = v.trim().toLowerCase();
+  if (v === "auto" || v === "transparent" || v === "inherit") return null;
+  if (NAMED[v]) return NAMED[v];
+  let m = v.match(/^#([0-9a-f]{3})$/);
+  if (m) return m[1].split("").map((c) => c + c).join("").toUpperCase();
+  m = v.match(/^#([0-9a-f]{6})$/);
+  if (m) return m[1].toUpperCase();
+  m = v.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  if (m) return [1, 2, 3].map((i) => (+m[i]).toString(16).padStart(2, "0")).join("").toUpperCase();
+  return null;
+}
+
+/* HTML из буфера (Word кладёт форматирование в text/html) → параграфы со спанами */
+function htmlToParagraphs(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  const paragraphs = [];
+  const paras = div.querySelectorAll("p, div, li");
+  const blocks = paras.length ? paras : [div];
+  blocks.forEach((p) => {
+    const spans = [];
+    const walk = (node, fmt) => {
+      node.childNodes.forEach((ch) => {
+        if (ch.nodeType === 3) {
+          if (ch.nodeValue) spans.push({ t: ch.nodeValue, b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+        } else if (ch.tagName === "BR") {
+          spans.push({ t: "\n", b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+        } else {
+          const f = { ...fmt };
+          if (["B", "STRONG"].includes(ch.tagName)) f.b = true;
+          if (["I", "EM"].includes(ch.tagName)) f.i = true;
+          if (ch.tagName === "MARK") f.h = "FFFF00";
+          const st = ch.style;
+          if (st) {
+            const c = colorFromCss(st.color);
+            if (c && c !== "000000") f.c = c;
+            const h = colorFromCss(st.backgroundColor || st.background);
+            if (h && h !== "000000") f.h = h;
+          }
+          walk(ch, f);
+        }
+      });
+    };
+    walk(p, { b: false, i: false, c: null, h: null });
+    if (spans.some((s) => s.t.trim())) paragraphs.push(spans);
+  });
+  return paragraphs;
+}
+
+async function sendClipboard(dt) {
+  const html = dt.getData && dt.getData("text/html");
+  const text = ((dt.getData && dt.getData("text/plain")) || dt.text || "");
+  if (!html && !text) { status("Буфер обмена пуст", true); return; }
+  status("Читаю буфер…", false);
+  const payload = html && /<(p|div|b|i|span|strong)\b/i.test(html)
+    ? { paragraphs: htmlToParagraphs(html), layout }
+    : { text, layout };
+  try {
+    ingest(await api.parseText(payload));
+  } catch (e) {
+    status(e.message || "Не удалось разобрать текст", true);
+  }
+}
+
+window.addEventListener("paste", (e) => {
+  const t = e.target;
+  if (t && t.closest && t.closest("input, textarea, [contenteditable]")) return;
+  if (drop.classList.contains("hidden") && !addMode
+      && !confirm("Заменить текущий конспект текстом из буфера?\n(Чтобы добавить в конец — нажмите «Добавить отрывки»)")) return;
+  e.preventDefault();
+  sendClipboard(e.clipboardData);
+});
+
+$("#pasteBtn").onclick = async (e) => {
+  e.stopPropagation(); // не открывать диалог выбора файла
+  try {
+    const items = await navigator.clipboard.read();
+    for (const it of items) {
+      if (it.types.includes("text/html")) {
+        return sendClipboard(await (await it.getType("text/html")));
+      }
+    }
+    for (const it of items) {
+      if (it.types.includes("text/plain")) {
+        return sendClipboard({ getData: () => "", text: await (await it.getType("text/plain")).text() });
+      }
+    }
+    status("В буфере нет текста", true);
+  } catch (err) {
+    status("Браузер не дал доступ к буферу. Кликните по странице и нажмите Ctrl+V", true);
+  }
+};
+
+$("#addBtn").onclick = () => {
+  addMode = true;
+  $("#addBtn").classList.add("primary");
+  drop.classList.remove("hidden");
+  status("Режим добавления: вставьте из буфера (Ctrl+V) или перетащите файл — отрывки добавятся в конец", false);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+/* превью-слайд: спаны → HTML (жирный/курсив/цвет/маркер) */
+function spansToHtml(spans) {
+  return spans.map((s) => {
+    let t = document.createTextNode(s.t).textContent;
+    if (s.i) t = "<i>" + t + "</i>";
+    if (s.b) t = "<b>" + t + "</b>";
+    if (s.h) t = "<mark>" + t + "</mark>";
+    if (s.c) t = `<span style="color:#${s.c}">${t}</span>`;
+    return t;
+  }).join("");
+}
+
+function render() {
+  $("#titleInput").value = state.title;
+  const grid = $("#grid");
+  grid.innerHTML = "";
+
+  state.passages.forEach((p, idx) => {
+    const card = document.createElement("div");
+    card.className = "slidecard" + (p.on === false ? " off" : "");
+    const head = document.createElement("div");
+    head.className = "head";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = p.on !== false;
+    cb.onchange = () => { p.on = cb.checked; card.classList.toggle("off", !cb.checked); updMeta(); };
+    const lbl = document.createElement("div");
+    lbl.className = "lbl"; lbl.title = p.label;
+    lbl.textContent = p.label;
+    const del = document.createElement("button");
+    del.className = "del"; del.textContent = "×"; del.title = "Удалить слайд";
+    del.onclick = () => {
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      state.passages.splice(idx, 1);
+      render();
+    };
+    head.append(cb, lbl, del);
+
+    const prev = document.createElement("div");
+    prev.className = "prev";
+    const fonts = (state.theme && state.theme.fonts) || {};
+    const ref = document.createElement("div");
+    ref.className = "ref"; ref.contentEditable = "true"; ref.spellcheck = false;
+    ref.style.fontFamily = `'${fonts.ref || "Arial"}', Arial, sans-serif`;
+    ref.textContent = p.screen;
+    ref.onblur = () => { p.screen = ref.textContent.trim(); };
+    const body = document.createElement("div");
+    body.className = "bodybox";
+    body.contentEditable = "true"; body.spellcheck = false;
+    body.style.fontFamily = `'${fonts.body || "Arial"}', Arial, sans-serif`;
+    body.innerHTML = p.paragraphs.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
+    body.onblur = () => { p.paragraphs = readEditable(body); };
+    prev.append(ref, body);
+
+    card.append(head, prev);
+    grid.append(card);
+  });
+  updMeta();
+  $("#work").classList.remove("hidden");
+  $("#toolbar").classList.remove("hidden");
+  $("#exportBtn").disabled = false;
+}
+
+/* HTML превью → обратно в спаны (жирный/курсив/цвет/маркер с учётом вложенности) */
+function readEditable(el) {
+  const out = [];
+  el.querySelectorAll("p").forEach((p) => {
+    const spans = [];
+    const walk = (node, fmt) => {
+      node.childNodes.forEach((ch) => {
+        if (ch.nodeType === 3) {
+          if (ch.nodeValue) spans.push({ t: ch.nodeValue, b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+        } else if (ch.tagName === "BR") {
+          spans.push({ t: "\n", b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+        } else {
+          const f = { ...fmt };
+          if (ch.tagName === "B" || ch.tagName === "STRONG") f.b = true;
+          if (ch.tagName === "I" || ch.tagName === "EM") f.i = true;
+          if (ch.tagName === "MARK") f.h = "FFFF00";
+          if (ch.tagName === "SPAN" && ch.style.color) f.c = ch.style.color.slice(1).toUpperCase();
+          walk(ch, f);
+        }
+      });
+    };
+    walk(p, { b: false, i: false, c: null, h: null });
+    if (spans.length) out.push(spans);
+  });
+  return out.length ? out : [[]];
+}
+
+function updMeta() {
+  const on = state.passages.filter((p) => p.on !== false).length;
+  $("#meta").textContent = `Слайдов: ${state.passages.length} · включено: ${on}`;
+}
+
+$("#againBtn").onclick = () => location.reload();
+
+async function doExport(fmt) {
+  const btn = fmt === "pptx" ? $("#exportPptxBtn") : $("#exportBtn");
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Собираю…';
+  document.activeElement && document.activeElement.blur && document.activeElement.blur();
+  const payload = { title: $("#titleInput").value, format: fmt,
+                    passages: state.passages.filter((p) => p.on !== false) };
+  const fname = (payload.title || "Проповедь").replace(/[\\/:*?"<>|]/g, "").trim() + "." + fmt;
+  try {
+    const { blob } = await api.exportFile(payload);
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+      // Android-обёртка: blob-скачивание WebView не работает — файл в кэш
+      // и системный лист «Поделиться» (сохранить / отправить)
+      const b64 = await new Promise((res) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(",", 2)[1]);
+        r.readAsDataURL(blob);
+      });
+      const P = window.Capacitor.Plugins;
+      const out = await P.Filesystem.writeFile({ path: fname, data: b64,
+                                                 directory: "CACHE" });
+      await P.Share.share({ title: fname, url: out.uri });
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  } catch (e) {
+    if (e && e.message !== "User canceled") {
+      alert("Не удалось собрать презентацию: " + e.message);
+    }
+    return;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+$("#exportBtn").onclick = () => doExport("pro");
+$("#exportPptxBtn").onclick = () => doExport("pptx");
+
+/* ядро (схема protobuf + тема) грузится сразу, чтобы экспорт не ждал */
+api.init().catch((e) => status("Не загрузилось ядро: " + e.message, true));
+
+/* PWA: оффлайн-кэш. В Capacitor-обёртке SW не нужен (origin https://localhost,
+   Cache API там не работает и роняет WebView) — пропускаем регистрацию */
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)
+    && !(window.capacitor || window.Capacitor)) {
+  navigator.serviceWorker.register("./sw.js");
+}
+</script>
+</body>
+</html>
