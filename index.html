@@ -205,7 +205,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.2.0 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.2.1 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -235,6 +235,21 @@
     </div>
   </div>
   <input type="file" id="file" accept=".docx,.txt" class="hidden">
+
+  <div id="pasteDlg" class="panel hidden" style="margin-top:10px">
+    <div class="phead">
+      <span class="cap">Вставка текста</span>
+      <span class="right">
+        <button type="button" class="iconbtn" id="pasteDlgClose" title="Закрыть" style="font-size:17px;color:#777;">×</button>
+      </span>
+    </div>
+    <div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+      <textarea id="pasteArea" rows="8" spellcheck="false"
+        placeholder="Нажмите на поле, затем долгое нажатие (или правый клик) → «Вставить». Выделения из Word не сохранятся, ссылки распознаются."
+        style="flex:1;min-height:120px;padding:9px 10px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;"></textarea>
+      <button id="pasteGo" type="button" class="primary" style="align-self:flex-end;">Разобрать</button>
+    </div>
+  </div>
 
   <div id="work" class="panel hidden">
     <div class="phead"><span class="cap">Предпросмотр слайдов</span></div>
@@ -427,6 +442,20 @@ window.addEventListener("paste", (e) => {
   sendClipboard(e.clipboardData);
 });
 
+/* ручная вставка — запасной путь, когда браузер не отдаёт буфер (телефоны) */
+const pasteDlg = $("#pasteDlg"), pasteArea = $("#pasteArea");
+function openPasteDialog() {
+  pasteArea.value = "";
+  pasteDlg.classList.remove("hidden");
+  pasteArea.focus();
+}
+$("#pasteDlgClose").onclick = () => pasteDlg.classList.add("hidden");
+$("#pasteGo").onclick = () => {
+  if (!pasteArea.value.trim()) { pasteArea.focus(); return; }
+  pasteDlg.classList.add("hidden");
+  sendClipboard({ getData: () => "", text: pasteArea.value });
+};
+
 $("#pasteBtn").onclick = async (e) => {
   e.stopPropagation(); // не открывать диалог выбора файла
   try {
@@ -441,9 +470,9 @@ $("#pasteBtn").onclick = async (e) => {
         return sendClipboard({ getData: () => "", text: await (await it.getType("text/plain")).text() });
       }
     }
-    status("В буфере нет текста", true);
+    openPasteDialog(); // буфер пуст — вставим руками
   } catch (err) {
-    status("Браузер не дал доступ к буферу. Кликните по странице и нажмите Ctrl+V", true);
+    openPasteDialog(); // нет доступа к буферу — вставим руками
   }
 };
 
