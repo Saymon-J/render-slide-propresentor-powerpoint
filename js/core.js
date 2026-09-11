@@ -2,7 +2,7 @@
 // раскрой стихов на слайды, RTF writer ProPresenter 7.
 // Изменять синхронно с parser.py / export.py (эталон) — проверяется test_core.mjs.
 
-import { parseRef, refForms } from "./books.js";
+import { parseRef, parseTailRef, refForms } from "./books.js";
 
 // Word-маркер (highlight) → RGB
 export const WD_HL = {
@@ -23,6 +23,11 @@ const SEP_RE = /^[\s*•·—–-]+$/;
 // абзац начинается с номера стиха («12 Итак, …») — mybible кладёт каждый стих
 // с новой строки, в теле отрывка они должны течь одним абзацем
 const VERSE_PAR = /^\d{1,3}(\s|$)/;
+// строка открывает блок стихов bible.com: номер стиха, возможно в «(»-обёртке
+const PEND_RE = /^[\s(]*\d{1,3}(\s|$)/;
+const LEAD_PAREN = /^[\s(]*/;
+// пары кавычек-обёрток тела: открывающая → закрывающая
+const QUOTES = { '"': '"', "'": "'", "«": "»", "“": "”", "‘": "’" };
 
 export function cutSpans(spans, n) {
   // Отрезать первые n символов из последовательности спанов.
@@ -72,6 +77,47 @@ export function splitLines(paragraphs) {
   return out;
 }
 
+function trimEndSpans(spans, drop = "") {
+  // Убрать хвостовые пробелы (и один символ drop, если он последний) у последнего спана.
+  const out = spans.map((sp) => ({ ...sp }));
+  while (out.length && !out[out.length - 1].text.trim()) out.pop();
+  if (out.length) {
+    const last = out[out.length - 1];
+    let t = last.text.replace(/\s+$/, "");
+    if (drop && t.endsWith(drop)) t = t.slice(0, -1).replace(/\s+$/, "");
+    out[out.length - 1] = { ...last, text: t };
+  }
+  return out;
+}
+
+function stripQuoteWrapper(p) {
+  // Тело, целиком взятое в кавычки, от кавычек очистить: "стихи", 'стихи', «стихи».
+  const pars = p.paragraphs;
+  const first = pars[0][0], last = pars[pars.length - 1].at(-1);
+  const lead = first.text.replace(/^\s+/, "");
+  const close = lead ? QUOTES[lead[0]] : undefined;
+  if (!close || !last.text.replace(/\s+$/, "").endsWith(close)) return;
+  pars[pars.length - 1] = trimEndSpans(pars[pars.length - 1], close);
+  const cut = cutSpans(pars[0], first.text.length - lead.length + 1);
+  if (cut.length) pars[0] = cut;
+}
+
+// номер стиха в теле: в начале абзаца или после знака препинания (возможно с
+// тире реплики NRT); «40 дней» перед числом без пунктуации — не стих
+const VNUM = /(?:^|(?<=[.,;:!?»])\s)(?:—\s+)?(\d{1,3})(?=\s)/g;
+
+export function verseRange(paragraphs) {
+  // Диапазон номеров стихов тела («11-12») — для хвостовой ссылки без стихов.
+  const nums = [];
+  for (const par of paragraphs) {
+    const t = par.map((sp) => sp.text).join("").replace(/^\s+/, "");
+    VNUM.lastIndex = 0;
+    for (const m of t.matchAll(VNUM)) nums.push(+m[1]);
+  }
+  if (!nums.length) return null;
+  return nums[0] === nums[nums.length - 1] ? String(nums[0]) : `${nums[0]}-${nums[nums.length - 1]}`;
+}
+
 export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
   // [(текст абзаца, спаны)] → Sermon. Источник — файл или вставленный текст.
   // Название проповеди — первая непустая строка, если она не ссылка.
@@ -83,13 +129,14 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
   for (const [text, spans] of paragraphs) {
     const stripped = text.trim();
 
-    if (!stripped) { cur = null; continue; }  // пустая строка закрывает тело
-    if (SEP_RE.test(stripped)) { cur = null; continue; }  // разделитель секции
+    if (!stripped || SEP_RE.test(stripped)) { cur = null; continue; }  // пустая строка/разделитель
 
-    const ref = parseRef(text);
+    let ref = parseRef(text);
+    const tail = parseTailRef(text);
+    if (tail) ref = null;  // «Книга, N глава» — всегда координаты, не ведущая ссылка
     if (!seenFirst) {
       seenFirst = true;
-      if (!ref) title = stripped;
+      if (!ref && !tail) title = stripped;
     }
 
     if (ref) {
@@ -98,11 +145,38 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
       const [, label] = refForms(book, refstr);
       cur = passage(label, label);
       passages.push(cur);
-      const rest = cutSpans(spans, consumed).filter((sp) => sp.text.trim());
+      let rest = cutSpans(spans, consumed).filter((sp) => sp.text.trim());
       if (rest.length) {
+        const close = { "(": ")", ...QUOTES }[text.replace(/^\s+/, "")[0]];
+        if (close) rest = trimEndSpans(rest, close);  // обёртка «(ссылка: текст)» / «'ссылка: текст'»
         cur.paragraphs.push(mergeSpans(rest));
         cur = null;  // однострочный отрывок, тело закрыто
       }
+      continue;
+    }
+
+    // координаты ПОД стихами (bible.com): закрывают безымянный блок стихов,
+    // без блока — просто строка-координаты, тело не набирают
+    if (tail) {
+      if (cur && !cur.screen && cur.paragraphs.length) {
+        const [book, refstr0] = tail;
+        let refstr = refstr0;
+        if (!refstr.includes(":")) {  // «N глава» без стихов — взять из тела
+          const vr = verseRange(cur.paragraphs);
+          if (vr) refstr = `${refstr}:${vr}`;
+        }
+        const [, label] = refForms(book, refstr);
+        cur.screen = cur.label = label;
+        passages.push(cur);
+      }
+      cur = null;
+      continue;
+    }
+
+    if (!cur && PEND_RE.test(text)) {
+      const clean = mergeSpans(cutSpans(spans, LEAD_PAREN.exec(text)[0].length)
+        .filter((sp) => sp.text.trim()));
+      if (clean.length) cur = passage("", "", [clean]);  // безымянный блок стихов
       continue;
     }
 
@@ -119,7 +193,9 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
     }
   }
 
-  return sermon(title || fallbackTitle, passages.filter((p) => p.paragraphs.length));
+  const kept = passages.filter((p) => p.paragraphs.length);
+  kept.forEach(stripQuoteWrapper);
+  return sermon(title || fallbackTitle, kept);
 }
 
 // ---------- раскрой стихов (export.py) ----------

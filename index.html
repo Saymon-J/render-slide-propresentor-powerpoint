@@ -111,7 +111,15 @@
   .slidecard:hover { border-color: var(--sel); }
   .slidecard.off { opacity: .4; }
   .slidecard .head { display: flex; align-items: center; gap: 7px; }
-  .slidecard .head input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); }
+  /* выключатель слайда — как активная кнопка-секция в ProPresenter:
+     красная когда включён, тёмная когда выключен */
+  .slidecard .head .tgl {
+    width: 22px; height: 22px; flex: none; display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 4px; background: #2a2a2a;
+    color: #6f6f6f; cursor: pointer; padding: 0;
+  }
+  .slidecard .head .tgl:hover { border-color: #666; }
+  .slidecard .head .tgl.on { background: #d03a30; border-color: #d03a30; color: #fff; }
   .slidecard .head .lbl {
     flex: 1; font-weight: 600; font-size: 12.5px; color: var(--ink);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -205,7 +213,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.2.2 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.4.1 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -263,7 +271,7 @@
 </main>
 
 <div class="toolbar hidden" id="toolbar">
-  <span class="tip">Снимите галочку, чтобы исключить слайд · × удаляет · текст правится прямо в превью</span>
+  <span class="tip">Красная кнопка слева выключает слайд из экспорта · × удаляет · текст правится прямо в превью</span>
   <div class="seg" id="layoutSeg" title="Раскладка стихов в теле слайда">
     <button type="button" data-l="flow">Стихи в строку</button>
     <button type="button" data-l="lines">Каждый стих с новой строки</button>
@@ -386,14 +394,12 @@ function htmlToParagraphs(html) {
   const div = document.createElement("div");
   div.innerHTML = html;
   const paragraphs = [];
-  const paras = div.querySelectorAll("p, div, li");
-  const blocks = paras.length ? paras : [div];
-  blocks.forEach((p) => {
+  const emit = (el) => {
     const spans = [];
     const walk = (node, fmt) => {
       node.childNodes.forEach((ch) => {
         if (ch.nodeType === 3) {
-          if (ch.nodeValue) spans.push({ t: ch.nodeValue, b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+          if (ch.nodeValue) spans.push({ t: ch.nodeValue.replace(/[\r\n\t]+/g, " "), b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
         } else if (ch.tagName === "BR") {
           spans.push({ t: "\n", b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
         } else {
@@ -412,9 +418,22 @@ function htmlToParagraphs(html) {
         }
       });
     };
-    walk(p, { b: false, i: false, c: null, h: null });
+    walk(el, { b: false, i: false, c: null, h: null });
     if (spans.some((s) => s.t.trim())) paragraphs.push(spans);
-  });
+  };
+  /* Word оборачивает всё в <div class=WordSection1>: обёртку обходим внутрь,
+     иначе каждый абзац учтён дважды и появляется «мега-абзац» из всего текста;
+     div без блочных детей (Gmail — строка на div) — сам абзац */
+  const structural = (el) => el.tagName === "DIV" && [...el.children].some((c) =>
+    c.nodeType === 1 && (c.tagName === "P" || c.tagName === "LI" || structural(c)));
+  const scan = (parent) => {
+    for (const ch of parent.children) {
+      if (structural(ch)) scan(ch);
+      else emit(ch);
+    }
+  };
+  scan(div);
+  if (!paragraphs.length) emit(div);  // разметки без блоков — всё одним абзацем
   return paragraphs;
 }
 
@@ -528,9 +547,21 @@ function render() {
     card.className = "slidecard" + (p.on === false ? " off" : "");
     const head = document.createElement("div");
     head.className = "head";
-    const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.checked = p.on !== false;
-    cb.onchange = () => { p.on = cb.checked; card.classList.toggle("off", !cb.checked); updMeta(); };
+    const tgl = document.createElement("button");
+    tgl.type = "button";
+    tgl.className = "tgl" + (p.on !== false ? " on" : "");
+    tgl.title = p.on !== false ? "Выключить слайд" : "Слайд выключен — включить";
+    tgl.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16">'
+      + '<path d="M8 1 15 5.2 8 9.4 1 5.2Z"/>'
+      + '<path d="M1.4 8.6 8 12.5l6.6-3.9" fill="none" stroke="currentColor" stroke-width="1.7"/>'
+      + '<path d="M1.4 11.6 8 15.5l6.6-3.9" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>';
+    tgl.onclick = () => {
+      p.on = p.on === false;
+      tgl.classList.toggle("on", p.on !== false);
+      tgl.title = p.on !== false ? "Выключить слайд" : "Слайд выключен — включить";
+      card.classList.toggle("off", p.on === false);
+      updMeta();
+    };
     const lbl = document.createElement("div");
     lbl.className = "lbl"; lbl.title = p.label;
     lbl.textContent = p.label;
@@ -541,7 +572,7 @@ function render() {
       state.passages.splice(idx, 1);
       render();
     };
-    head.append(cb, lbl, del);
+    head.append(tgl, lbl, del);
 
     const prev = document.createElement("div");
     prev.className = "prev";
@@ -576,7 +607,7 @@ function readEditable(el) {
     const walk = (node, fmt) => {
       node.childNodes.forEach((ch) => {
         if (ch.nodeType === 3) {
-          if (ch.nodeValue) spans.push({ t: ch.nodeValue, b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+          if (ch.nodeValue) spans.push({ t: ch.nodeValue.replace(/[\r\n\t]+/g, " "), b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
         } else if (ch.tagName === "BR") {
           spans.push({ t: "\n", b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
         } else {
@@ -653,6 +684,21 @@ api.init().catch((e) => status("Не загрузилось ядро: " + e.mess
 if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)
     && !(window.capacitor || window.Capacitor)) {
   navigator.serviceWorker.register("./sw.js");
+  /* новая версия SW активируется сразу (skipWaiting), но страница уже загружена
+     старыми модулями — один раз перезагружаемся, иначе пользователь видит
+     смесь версий (кэш-кэш и свежие файлы) */
+  if (navigator.serviceWorker.controller) {
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      /* конспект уже загружен — не роняем работу, обновление подхватится
+         следующим заходом */
+      if (!reloaded && !document.querySelector(".slidecard")) {
+        reloaded = true;
+        location.reload();
+      }
+    });
+    navigator.serviceWorker.getRegistration().then((r) => r && r.update());
+  }
 }
 </script>
 </body>

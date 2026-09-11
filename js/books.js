@@ -206,6 +206,9 @@ const MAX_BOOK = 40;
 const NUM_RE = /[1-3][\s.-]*/y;
 const CHAP_RE = /\d+(?:\s*[:.]\s*\d+(?:\s*[-–—,]\s*\d+)*)?/y;
 
+// \b в JS не работает с кириллицей — границу слова даём лукэхедом
+const TAIL_RE = /^[\s,;:]*(\d{1,3})(?:\s*[:.]\s*(\d+(?:\s*[-–—,;]\s*\d+)*))?\s*(?:глав[а-яё]*|гл)(?![а-яёa-z]).*$/i;
+
 function canonVerses(vs) {
   return vs.replace(/\s*[-–—,;]\s*/g, (m) => ("-–—".includes(m.trim()) ? "-" : ","));
 }
@@ -213,6 +216,25 @@ function canonVerses(vs) {
 function firstDigit(s) {
   for (let i = 0; i < s.length; i++) if (/[0-9]/.test(s[i])) return i;
   return s.length;
+}
+
+function matchBook(s) {
+  // Начало строки → [книга, индекс за именем]. Общая часть parseRef/parseTailRef.
+  let pos = 0;
+  const m = matchAt(NUM_RE, s, 0);
+  if (m) pos = m[0].length;
+  const body = s.slice(pos);
+  let di = firstDigit(body);
+  let b = di <= MAX_BOOK ? findBook(s.slice(0, pos) + body.slice(0, di)) : null;
+  const exact1 = di <= MAX_BOOK ? byKey.get(normalize(s.slice(0, pos) + body.slice(0, di))) ?? null : null;
+  // имя книги само содержит цифру: «Второе послание к 2 Коринфянам 3:18» —
+  // точный ключ длиннее префиксного
+  const di2 = firstDigit(body.slice(di + 1)) + di + 1;
+  if (di2 - di <= MAX_BOOK) {
+    const cand = byKey.get(normalize(s.slice(0, pos) + body.slice(0, di2)));
+    if (cand !== undefined && (b === null || exact1 === null)) { b = cand; di = di2; }
+  }
+  return b === null ? null : [b, pos + di];
 }
 
 // допустимое сразу после совпавшей главы/стихов: mybible ставит «:» перед текстом
@@ -254,7 +276,13 @@ function parseChapters(s) {
 
 export function parseRef(line, depth = 0) {
   // Ссылка в начале строки → [книга, запись «Г:С-С; Г:С», длина совпадения] | null.
+  // mybible: префикс перевода до запятой; вставка в скобках «(2Кор 7:4: "текст")» —
+  // скобка уходит в consumed.
   let s = line.replace(/^\s+/, "");
+  if (s.startsWith("(")) {
+    const r = parseRef(s.slice(1), 1);
+    return r && [r[0], r[1], line.length - s.length + 1 + r[2]];
+  }
   if (depth === 0 && s.includes(",")) {
     const ci = s.indexOf(",");
     const head = s.slice(0, ci), rest = s.slice(ci + 1);
@@ -267,25 +295,26 @@ export function parseRef(line, depth = 0) {
     }
   }
 
-  let num = "";
-  const m = matchAt(NUM_RE, s, 0);
-  if (m) { num = m[0]; s = s.slice(m[0].length); }
-  const di0 = firstDigit(s);
-  let di = di0;
-  let b = di <= MAX_BOOK ? findBook(num + s.slice(0, di)) : null;
-  const exact1 = di <= MAX_BOOK ? byKey.get(normalize(num + s.slice(0, di))) ?? null : null;
-  // имя книги само содержит цифру: «Второе послание к 2 Коринфянам 3:18» —
-  // точный ключ длиннее префиксного
-  const di2 = firstDigit(s.slice(di + 1)) + di + 1;
-  if (di2 - di <= MAX_BOOK) {
-    const cand = byKey.get(normalize(num + s.slice(0, di2)));
-    if (cand !== undefined && (b === null || exact1 === null)) { b = cand; di = di2; }
-  }
-  if (b === null) return null;
+  const mb = matchBook(s);
+  if (!mb) return null;
+  const [b, di] = mb;
   const r = parseChapters(s.slice(di));
   if (!r) return null;
   const [ref, consumed] = r;
   return [b, ref, line.length - s.length + di + consumed];
+}
+
+export function parseTailRef(line) {
+  // Ссылка-координаты ПОД стихами (bible.com): «2 Коринфянам, 6 глава — Библия — …»
+  // → [книга, «Г» или «Г:С-С»] | null. Слово «глава»/«гл» обязательно.
+  let s = line.replace(/^\s+/, "");
+  if (s.startsWith("(")) s = s.slice(1).replace(/^\s+/, "");
+  const mb = matchBook(s);
+  if (!mb) return null;
+  const [b, di] = mb;
+  const m = TAIL_RE.exec(s.slice(di));
+  if (!m) return null;
+  return [b, m[1] + (m[2] ? ":" + canonVerses(m[2]) : "")];
 }
 
 export function refForms(b, ref) {
