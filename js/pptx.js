@@ -59,10 +59,11 @@ export async function buildPptx(sermon, theme, outputType = "blob") {
   };
 
   let s = addSlide();
-  addText(s, t.title_box, t.title_size, "center", true, [[span(sermon.title)]], true, titleFont);
+  // заголовок капсом, как нативный Capitalization=ALL_CAPS у .pro-титула
+  addText(s, t.title_box, t.title_size, "center", true, [[span(sermon.title.toUpperCase())]], true, titleFont);
   for (const passage of sermon.passages) {
     s = addSlide();
-    addText(s, t.ref_box, t.ref_size, "left", true, [[span(passage.screen)]], true, font);
+    addText(s, t.ref_box, t.ref_size, "left", true, [[span(passage.screen)]], false, font);
     addText(s, t.body_box, t.body_size, "left", false, passage.paragraphs, false, font);
   }
   return pptx.write({ outputType });
