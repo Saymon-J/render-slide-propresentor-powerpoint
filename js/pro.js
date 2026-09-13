@@ -6,6 +6,7 @@ import { span, buildRtf } from "./core.js";
 
 let root = null;      // protobufjs Root (после initPro)
 let THEME = null;     // параметры темы (порт theme.CURRENT без слайдов-сообщений)
+let DEF = null;       // параметры spbcoc по умолчанию — снимок шаблона
 
 const T = () => {
   if (!THEME) throw new Error("initPro() не вызван");
@@ -41,6 +42,7 @@ export function initPro(schemaJson, templateBytes) {
     font: refEl.text.attributes.font.name,
     ref_size: refEl.text.attributes.font.size,
     ref_box: box(refEl),
+    body_font: bodyEl.text.attributes.font.name,
     body_size: bodyEl.text.attributes.font.size,
     body_box: box(bodyEl),
     slide_bg: [bg.red, bg.green, bg.blue],
@@ -49,15 +51,39 @@ export function initPro(schemaJson, templateBytes) {
     line_chars: 42,
     max_lines: 12,
   };
+  DEF = {
+    title_font: THEME.title_font, title_size: THEME.title_size,
+    font: THEME.font, ref_size: THEME.ref_size,
+    body_font: THEME.body_font, body_size: THEME.body_size,
+    line_chars: THEME.line_chars, max_lines: THEME.max_lines,
+  };
   return THEME;
+}
+
+export function applyTheme(o = {}) {
+  // Тема пользователя: шрифты/размеры (пустое — вернуть spbcoc). Дробление
+  // пересчитывается линейно под размер тела — ponytail: линейная прикидка,
+  // не точная метрика шрифта под бокс темы
+  const t = T();
+  const clean = (s) => (s || "").replace(/[;{}\\]/g, "").trim();  // не ломать RTF fonttbl
+  t.title_font = clean(o.title_font) || DEF.title_font;
+  t.title_size = +o.title_size || DEF.title_size;
+  t.font = clean(o.font) || DEF.font;
+  t.ref_size = +o.ref_size || DEF.ref_size;
+  t.body_font = clean(o.body_font) || DEF.body_font;
+  t.body_size = +o.body_size || DEF.body_size;
+  t.line_chars = Math.max(8, Math.round(DEF.line_chars * DEF.body_size / t.body_size));
+  t.max_lines = Math.max(2, Math.round(DEF.max_lines * DEF.body_size / t.body_size));
+  return t;
 }
 
 export const theme = T;
 
 export const defaultUid = () => ({ string: crypto.randomUUID() });
 
-function slideFrom(tmpl, texts, uid) {
-  // Клон слайда-шаблона темы с заменой текста (элементы сверху вниз).
+function slideFrom(tmpl, items, uid) {
+  // Клон слайда-шаблона темы с заменой текста (элементы сверху вниз);
+  // items: [{rtf, font, size}] — атрибуты элемента синхронны с RTF
   const PS = root.lookupType("rv.data.PresentationSlide");
   const Slide = root.lookupType("rv.data.Slide");
   const Element = root.lookupType("rv.data.Slide.Element");
@@ -71,7 +97,12 @@ function slideFrom(tmpl, texts, uid) {
   for (const w of wrapped) {
     const cell = clone(Element, w);
     cell.element.uuid = uid();
-    if (texts.length) cell.element.text.rtf_data = enc.encode(texts.shift());
+    if (items.length) {
+      const it = items.shift();
+      cell.element.text.rtf_data = enc.encode(it.rtf);
+      cell.element.text.attributes.font.name = it.font;
+      cell.element.text.attributes.font.size = it.size;
+    }
     ps.base_slide.elements.push(cell);
   }
   ps.notes = { rtf_data: enc.encode("{\\rtf0\\ansi\\ansicpg1252}") };
@@ -117,11 +148,15 @@ export function buildPresentation(sermon, uid = defaultUid) {
   // заголовок капсом текстом: атрибут Capitalization=ALL_CAPS PP при импорте
   // не отрисовывает, рендер идёт по RTF
   const titleRtf = buildRtf([[span(sermon.title.toUpperCase())]], t.title_size, "center", true, t.title_font, t);
-  addCue(sermon.title, slideFrom(t.title_slide, [titleRtf], uid));
+  addCue(sermon.title, slideFrom(t.title_slide,
+    [{ rtf: titleRtf, font: t.title_font, size: t.title_size }], uid));
   for (const passage of sermon.passages) {
     const refRtf = buildRtf([[span(passage.screen)]], t.ref_size, "left", false, t.font, t);  // координаты — начертанием шрифта, не жирным
-    const bodyRtf = buildRtf(passage.paragraphs, t.body_size, "left", false, t.font, t);
-    addCue(passage.label, slideFrom(t.ref_slide, [refRtf, bodyRtf], uid));
+    const bodyRtf = buildRtf(passage.paragraphs, t.body_size, "left", false, t.body_font, t);
+    addCue(passage.label, slideFrom(t.ref_slide, [
+      { rtf: refRtf, font: t.font, size: t.ref_size },
+      { rtf: bodyRtf, font: t.body_font, size: t.body_size },
+    ], uid));
   }
 
   p.cues = cues;

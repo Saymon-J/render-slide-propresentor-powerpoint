@@ -47,6 +47,7 @@ export async function buildPptx(sermon, theme, outputType = "blob") {
   const t = theme;
   const titleFont = family(t.title_font);
   const font = family(t.font);
+  const bodyFont = family(t.body_font);
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: "PP", width: inch(1920), height: inch(1080) });
   pptx.layout = "PP";
@@ -64,7 +65,7 @@ export async function buildPptx(sermon, theme, outputType = "blob") {
   for (const passage of sermon.passages) {
     s = addSlide();
     addText(s, t.ref_box, t.ref_size, "left", true, [[span(passage.screen)]], false, font);
-    addText(s, t.body_box, t.body_size, "left", false, passage.paragraphs, false, font);
+    addText(s, t.body_box, t.body_size, "left", false, passage.paragraphs, false, bodyFont);
   }
   return pptx.write({ outputType });
 }

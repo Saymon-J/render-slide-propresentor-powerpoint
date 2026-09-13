@@ -1,11 +1,17 @@
 // Мост UI ↔ JS-ядро: те же формы запросов/ответов, что были у Flask-эндпоинтов
 // (api/parse, api/parse/text, api/relayout, api/export). Вся логика — на устройстве.
 import { span, splitParagraphs, parseSermonParagraphs } from "./core.js";
-import { initPro, theme, buildPresentation } from "./pro.js";
+import { initPro, theme, buildPresentation, applyTheme } from "./pro.js";
 import { buildPptx } from "./pptx.js";
 import { docxParagraphs, txtParagraphs } from "./docx.js";
 
 export class ApiError extends Error {}
+
+// тема оформления: шрифты/размеры для UI; applyTheme меняет тему ядра
+export { applyTheme, theme as currentTheme };
+
+// «Onest-Medium» → «Onest Medium»: превью подставляет имя семейства, как pptx.js
+export const displayFont = (name) => name.replace(/-Regular$/, "").replace("-", " ");
 
 let ready = null;
 export function init() {
@@ -25,9 +31,6 @@ export function init() {
 const parasJson = (paras) => paras.map((par) => par.map((sp) =>
   ({ t: sp.text, b: sp.bold, i: sp.italic, c: sp.color, h: sp.highlight })));
 
-// «Onest-Medium» → «Onest Medium»: превью подставляет имя семейства, как pptx.js
-const displayFont = (name) => name.replace(/-Regular$/, "").replace("-", " ");
-
 function sermonToJson(s, layout) {
   const t = theme();
   const join = layout !== "lines";
@@ -39,7 +42,7 @@ function sermonToJson(s, layout) {
   }
   return {
     title: s.title,
-    theme: { name: t.name, fonts: { ref: displayFont(t.font), body: displayFont(t.font) } },
+    theme: { name: t.name, fonts: { ref: displayFont(t.font), body: displayFont(t.body_font) } },
     passages,
   };
 }
@@ -112,6 +115,7 @@ export async function relayout(d) {
 
 export async function exportFile(d) {
   await init();
+  if (d.theme) applyTheme(d.theme);  // тема из запроса (настройки UI)
   const s = jsonToSermon(d);
   if (d.format === "pptx") {
     return { blob: await buildPptx(s, theme(), "blob"), ext: "pptx" };

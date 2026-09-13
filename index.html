@@ -132,14 +132,16 @@
   }
   .del:hover { color: var(--danger); background: #4a3232; }
 
-  /* превью слайда 16:9 — как выходной монитор PP7 */
+  /* превью слайда 16:9 — как выходной монитор PP7; container-type — чтобы
+     шрифты превью масштабировались в cqh от высоты бокса (единицы темы) */
   .prev {
     position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
     border: 1px solid var(--line); border-radius: 4px; overflow: hidden; user-select: none;
+    container-type: size;
   }
   .prev .ref {
     position: absolute; top: 2.5%; left: 2%; width: 96%; padding-left: 2.6%;
-    text-align: left; color: #fff; font-weight: 700;
+    text-align: left; color: #fff; font-weight: normal;
     font-size: clamp(10px, 2.4vw, 15px);
     font-family: Arial, sans-serif; white-space: nowrap;
   }
@@ -172,6 +174,19 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .hidden { display: none !important; }
 
+  /* ---------- панель темы оформления ---------- */
+  .subpanel { margin: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); }
+  .subpanel .shead { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .subpanel .shead .cap2 { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .subpanel .shead .right2 { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .subpanel .shead button { padding: 5px 10px; font-size: 12px; }
+  .tgrid { display: grid; grid-template-columns: max-content 1fr 86px; gap: 8px 10px; align-items: center; padding: 10px; }
+  .tgrid label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .tgrid input, #themeSel {
+    padding: 6px 8px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 5px; min-width: 0;
+  }
+
   /* ---------- мобильная адаптация ---------- */
   @media (max-width: 640px) {
     .topbar { height: auto; min-height: 48px; flex-wrap: wrap; padding: 6px 12px; gap: 8px; }
@@ -193,6 +208,8 @@
     .del { min-height: 36px; min-width: 36px; font-size: 19px; }
     .bar { padding: 8px 10px; }
     #titleInput { min-width: 0; width: 100%; }
+    .tgrid { grid-template-columns: 1fr 86px; }
+    .tgrid label { grid-column: 1 / -1; }
   }
 </style>
 </head>
@@ -213,7 +230,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.4.5 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.5.0 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -265,6 +282,42 @@
       <label for="titleInput">Название проповеди (титульный слайд):</label>
       <input id="titleInput" type="text" placeholder="Название проповеди…">
     </div>
+    <div id="themePanel" class="subpanel hidden">
+      <div class="shead">
+        <span class="cap2">Тема оформления</span>
+        <span class="right2">
+          <select id="themeSel" title="Тема"></select>
+          <button id="themeSave" type="button">Сохранить как тему</button>
+          <button id="themeDel" type="button" class="hidden">Удалить</button>
+        </span>
+      </div>
+      <div class="tgrid">
+        <label for="fTitleFont">Название (титульный слайд)</label>
+        <input id="fTitleFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+        <input id="fTitleSize" type="number" min="20" max="500" step="5" title="Размер, единицы темы">
+        <label for="fRefFont">Координаты (шапка слайда)</label>
+        <input id="fRefFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+        <input id="fRefSize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
+        <label for="fBodyFont">Тело отрывка</label>
+        <input id="fBodyFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+        <input id="fBodySize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
+      </div>
+    </div>
+    <datalist id="fontList">
+      <option value="Onest-Regular"></option><option value="Onest-Medium"></option>
+      <option value="Onest-SemiBold"></option><option value="Onest-Bold"></option>
+      <option value="Onest-Light"></option><option value="Onest-ExtraBold"></option>
+      <option value="Forum"></option><option value="Arial"></option>
+      <option value="Helvetica"></option><option value="Georgia"></option>
+      <option value="Verdana"></option><option value="Tahoma"></option>
+      <option value="Times New Roman"></option>
+      <option value="Roboto-Regular"></option><option value="Roboto-Medium"></option>
+      <option value="Roboto-Bold"></option><option value="Montserrat-Regular"></option>
+      <option value="Montserrat-Medium"></option><option value="Montserrat-SemiBold"></option>
+      <option value="Montserrat-Bold"></option><option value="Inter-Regular"></option>
+      <option value="Inter-Medium"></option><option value="BebasNeueBold"></option>
+      <option value="PTSans-Regular"></option><option value="Lora-Regular"></option>
+    </datalist>
     <div id="meta"></div>
     <div class="grid" id="grid"></div>
   </div>
@@ -288,6 +341,14 @@
       <path d="M11.6 1.8v2.8H8.8" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     Другой конспект
+  </button>
+  <button id="themeBtn">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2 4h7M12.5 4H14M2 12h1.5M7 12h7" stroke="#ccc" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="10" cy="4" r="2" stroke="#ccc" stroke-width="1.4"/>
+      <circle cx="4.5" cy="12" r="2" stroke="#ccc" stroke-width="1.4"/>
+    </svg>
+    Оформление
   </button>
   <button id="exportPptxBtn">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -525,6 +586,90 @@ $("#addBtn").onclick = () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
+/* ---------- тема оформления: шрифты/размеры, свои темы (офлайн, localStorage) ---------- */
+const THEME_KEY = "ppThemes", THEME_CUR = "ppThemeCurrent";
+const DEFAULT_THEME = "spbcoc";
+const THEME_KEYS = ["title_font", "title_size", "font", "ref_size", "body_font", "body_size"];
+const THEME_INPUTS = [
+  ["fTitleFont", "title_font"], ["fTitleSize", "title_size"],
+  ["fRefFont", "font"], ["fRefSize", "ref_size"],
+  ["fBodyFont", "body_font"], ["fBodySize", "body_size"],
+];
+let curTheme = localStorage.getItem(THEME_CUR) || DEFAULT_THEME;
+let lastBodySize = null;  // изменился размер тела → перебить стихи по слайдам
+
+const themesMap = () => { try { return JSON.parse(localStorage.getItem(THEME_KEY)) || {}; } catch { return {}; } };
+const pickTheme = (t) => Object.fromEntries(THEME_KEYS.map((k) => [k, t[k]]));
+const themeFieldsFromInputs = () => Object.fromEntries(
+  THEME_INPUTS.map(([id, k]) => [k, $("#" + id).value.trim()]));
+const setThemeInputs = (t) => THEME_INPUTS.forEach(([id, k]) => { $("#" + id).value = t[k]; });
+
+function refreshThemeSel() {
+  const sel = $("#themeSel");
+  sel.innerHTML = "";
+  const add = (v, label) => { const o = document.createElement("option"); o.value = v; o.textContent = label; sel.append(o); };
+  add(DEFAULT_THEME, DEFAULT_THEME + " (по умолчанию)");
+  for (const n of Object.keys(themesMap())) add(n, n);
+  if (curTheme !== DEFAULT_THEME && !themesMap()[curTheme]) curTheme = DEFAULT_THEME;
+  sel.value = curTheme;
+  $("#themeDel").classList.toggle("hidden", curTheme === DEFAULT_THEME);
+}
+
+async function applyThemeInputs() {
+  const t = api.applyTheme(themeFieldsFromInputs());
+  if (lastBodySize !== null && t.body_size !== lastBodySize && state.passages.length) {
+    try { state.passages = (await api.relayout({ layout, passages: state.passages })).passages; }
+    catch (err) { /* перебивка не удалась — рендерим с текущим раскроем */ }
+  }
+  lastBodySize = t.body_size;
+  render();
+}
+
+function initThemeUI() {
+  const saved = curTheme !== DEFAULT_THEME ? themesMap()[curTheme] : null;
+  if (saved) api.applyTheme(saved);  // выбранная тема переживает перезагрузку
+  setThemeInputs(api.currentTheme());
+  lastBodySize = api.currentTheme().body_size;
+  refreshThemeSel();
+}
+
+$("#themeBtn").onclick = () => $("#themePanel").classList.toggle("hidden");
+THEME_INPUTS.forEach(([id]) => $("#" + id).addEventListener("change", applyThemeInputs));
+
+$("#themeSel").onchange = async () => {
+  curTheme = $("#themeSel").value;
+  localStorage.setItem(THEME_CUR, curTheme);
+  api.applyTheme(curTheme === DEFAULT_THEME ? {} : themesMap()[curTheme]);
+  setThemeInputs(api.currentTheme());
+  await applyThemeInputs();
+  refreshThemeSel();
+};
+
+$("#themeSave").onclick = () => {
+  const name = (prompt("Название темы:", curTheme === DEFAULT_THEME ? "Моя тема" : curTheme) || "").trim();
+  if (!name) return;
+  if (name === DEFAULT_THEME) { alert(`«${DEFAULT_THEME}» — тема по умолчанию, выберите другое имя`); return; }
+  const m = themesMap();
+  m[name] = pickTheme(api.currentTheme());
+  localStorage.setItem(THEME_KEY, JSON.stringify(m));
+  curTheme = name;
+  localStorage.setItem(THEME_CUR, name);
+  refreshThemeSel();
+};
+
+$("#themeDel").onclick = async () => {
+  if (!confirm(`Удалить тему «${curTheme}»?`)) return;
+  const m = themesMap();
+  delete m[curTheme];
+  localStorage.setItem(THEME_KEY, JSON.stringify(m));
+  curTheme = DEFAULT_THEME;
+  localStorage.setItem(THEME_CUR, curTheme);
+  api.applyTheme({});
+  setThemeInputs(api.currentTheme());
+  await applyThemeInputs();
+  refreshThemeSel();
+};
+
 /* превью-слайд: спаны → HTML (жирный/курсив/цвет/маркер) */
 function spansToHtml(spans) {
   return spans.map((s) => {
@@ -576,16 +721,18 @@ function render() {
 
     const prev = document.createElement("div");
     prev.className = "prev";
-    const fonts = (state.theme && state.theme.fonts) || {};
+    const th = api.currentTheme();
     const ref = document.createElement("div");
     ref.className = "ref"; ref.contentEditable = "true"; ref.spellcheck = false;
-    ref.style.fontFamily = `'${fonts.ref || "Arial"}', Arial, sans-serif`;
+    ref.style.fontFamily = `'${api.displayFont(th.font)}', Arial, sans-serif`;
+    ref.style.fontSize = `${(th.ref_size / 10.8).toFixed(2)}cqh`;  // 1080 ед. темы = 100 cqh
     ref.textContent = p.screen;
     ref.onblur = () => { p.screen = ref.textContent.trim(); };
     const body = document.createElement("div");
     body.className = "bodybox";
     body.contentEditable = "true"; body.spellcheck = false;
-    body.style.fontFamily = `'${fonts.body || "Arial"}', Arial, sans-serif`;
+    body.style.fontFamily = `'${api.displayFont(th.body_font)}', Arial, sans-serif`;
+    body.style.fontSize = `${(th.body_size / 10.8).toFixed(2)}cqh`;
     body.innerHTML = p.paragraphs.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
     body.onblur = () => { p.paragraphs = readEditable(body); };
     prev.append(ref, body);
@@ -640,7 +787,8 @@ async function doExport(fmt) {
   btn.innerHTML = '<span class="spinner"></span> Собираю…';
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
   const payload = { title: $("#titleInput").value, format: fmt,
-                    passages: state.passages.filter((p) => p.on !== false) };
+                    passages: state.passages.filter((p) => p.on !== false),
+                    theme: pickTheme(api.currentTheme()) };
   const fname = (payload.title || "Проповедь").replace(/[\\/:*?"<>|]/g, "").trim() + "." + fmt;
   try {
     const { blob } = await api.exportFile(payload);
@@ -677,7 +825,7 @@ $("#exportBtn").onclick = () => doExport("pro");
 $("#exportPptxBtn").onclick = () => doExport("pptx");
 
 /* ядро (схема protobuf + тема) грузится сразу, чтобы экспорт не ждал */
-api.init().catch((e) => status("Не загрузилось ядро: " + e.message, true));
+api.init().then(initThemeUI).catch((e) => status("Не загрузилось ядро: " + e.message, true));
 
 /* PWA: оффлайн-кэш. В Capacitor-обёртке SW не нужен (origin https://localhost,
    Cache API там не работает и роняет WebView) — пропускаем регистрацию */
