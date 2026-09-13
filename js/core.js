@@ -118,6 +118,13 @@ export function verseRange(paragraphs) {
   return nums[0] === nums[nums.length - 1] ? String(nums[0]) : `${nums[0]}-${nums[nums.length - 1]}`;
 }
 
+// название конспекта часто пишут в кавычках («...», "...") — титул без них
+function stripTitleQuotes(title) {
+  const t = title.trim();
+  const close = QUOTES[t[0]];
+  return close && t.length > 1 && t.endsWith(close) ? t.slice(1, -1).trim() : t;
+}
+
 export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
   // [(текст абзаца, спаны)] → Sermon. Источник — файл или вставленный текст.
   // Название проповеди — первая непустая строка, если она не ссылка.
@@ -195,7 +202,7 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
 
   const kept = passages.filter((p) => p.paragraphs.length);
   kept.forEach(stripQuoteWrapper);
-  return sermon(title || fallbackTitle, kept);
+  return sermon(stripTitleQuotes(title) || fallbackTitle, kept);
 }
 
 // ---------- раскрой стихов (export.py) ----------

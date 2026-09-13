@@ -99,6 +99,7 @@ export function buildPresentation(sermon, uid = defaultUid) {
   const addCue = (label, slide) => {
     const cue = Cue.create();
     cue.uuid = uid();
+    cue.isEnabled = true;  // без этого cue по умолчанию false — слайды в PP7 выключены
     cue.completion_target_uuid = { string: "00000000-0000-0000-0000-000000000000" };
     cue.completion_action_type = enumVal("rv.data.Cue.CompletionActionType", "COMPLETION_ACTION_TYPE_LAST");
     cue.completion_action_uuid = { string: "00000000-0000-0000-0000-000000000000" };

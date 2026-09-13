@@ -9,7 +9,9 @@ const PT_SCALE = 0.5;     // высота слайда 540pt против 1080 �
 const IN_PER_EMU = 1 / 914400;
 const inch = (px) => px * EMU_PER_PX * IN_PER_EMU;
 
-const family = (name) => name.split("-")[0];  // «Onest-Regular» → «Onest»
+// «Onest-Regular» → «Onest», «Onest-Medium» → «Onest Medium»: статические
+// начертания Google Fonts регистрируются отдельными семействами
+const family = (name) => name.replace(/-Regular$/, "").replace("-", " ");
 const hex = (rgb) => rgb.map((v) => v.toString(16).padStart(2, "0").toUpperCase()).join("");
 
 // paragraphs → ранги PptxGenJS; конец абзаца — breakLine

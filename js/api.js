@@ -25,6 +25,9 @@ export function init() {
 const parasJson = (paras) => paras.map((par) => par.map((sp) =>
   ({ t: sp.text, b: sp.bold, i: sp.italic, c: sp.color, h: sp.highlight })));
 
+// «Onest-Medium» → «Onest Medium»: превью подставляет имя семейства, как pptx.js
+const displayFont = (name) => name.replace(/-Regular$/, "").replace("-", " ");
+
 function sermonToJson(s, layout) {
   const t = theme();
   const join = layout !== "lines";
@@ -36,7 +39,7 @@ function sermonToJson(s, layout) {
   }
   return {
     title: s.title,
-    theme: { name: t.name, fonts: { ref: t.font.split("-")[0], body: t.font.split("-")[0] } },
+    theme: { name: t.name, fonts: { ref: displayFont(t.font), body: displayFont(t.font) } },
     passages,
   };
 }
