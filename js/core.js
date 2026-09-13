@@ -118,11 +118,16 @@ export function verseRange(paragraphs) {
   return nums[0] === nums[nums.length - 1] ? String(nums[0]) : `${nums[0]}-${nums[nums.length - 1]}`;
 }
 
-// название конспекта часто пишут в кавычках («...», "...") — титул без них
-function stripTitleQuotes(title) {
-  const t = title.trim();
+// название конспекта: снять кавычки-обёртки («...», "...") и поставить
+// заглавную первую букву каждого слова (не знак: «, ( и т.п.)
+function cleanTitle(title) {
+  let t = title.trim();
   const close = QUOTES[t[0]];
-  return close && t.length > 1 && t.endsWith(close) ? t.slice(1, -1).trim() : t;
+  if (close && t.length > 1 && t.endsWith(close)) t = t.slice(1, -1).trim();
+  return t.split(/\s+/).map((w) => {
+    const i = w.search(/\p{L}/u);
+    return i < 0 ? w : w.slice(0, i) + w[i].toUpperCase() + w.slice(i + 1);
+  }).join(" ");
 }
 
 export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
@@ -202,7 +207,7 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
 
   const kept = passages.filter((p) => p.paragraphs.length);
   kept.forEach(stripQuoteWrapper);
-  return sermon(stripTitleQuotes(title) || fallbackTitle, kept);
+  return sermon(cleanTitle(title) || fallbackTitle, kept);
 }
 
 // ---------- раскрой стихов (export.py) ----------
