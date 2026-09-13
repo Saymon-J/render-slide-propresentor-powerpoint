@@ -114,7 +114,9 @@ export function buildPresentation(sermon, uid = defaultUid) {
     cueIds.push(cue.uuid);
   };
 
-  const titleRtf = buildRtf([[span(sermon.title)]], t.title_size, "center", true, t.title_font, t);
+  // заголовок капсом текстом: атрибут Capitalization=ALL_CAPS PP при импорте
+  // не отрисовывает, рендер идёт по RTF
+  const titleRtf = buildRtf([[span(sermon.title.toUpperCase())]], t.title_size, "center", true, t.title_font, t);
   addCue(sermon.title, slideFrom(t.title_slide, [titleRtf], uid));
   for (const passage of sermon.passages) {
     const refRtf = buildRtf([[span(passage.screen)]], t.ref_size, "left", false, t.font, t);  // координаты — начертанием шрифта, не жирным

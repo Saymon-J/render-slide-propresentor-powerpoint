@@ -59,7 +59,7 @@ export async function buildPptx(sermon, theme, outputType = "blob") {
   };
 
   let s = addSlide();
-  // заголовок капсом, как нативный Capitalization=ALL_CAPS у .pro-титула
+  // заголовок капсом текстом — как .pro-титул (текст в верхнем регистре)
   addText(s, t.title_box, t.title_size, "center", true, [[span(sermon.title.toUpperCase())]], true, titleFont);
   for (const passage of sermon.passages) {
     s = addSlide();
