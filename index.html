@@ -230,7 +230,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.5.0 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.5.1 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -270,7 +270,7 @@
     </div>
     <div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
       <textarea id="pasteArea" rows="8" spellcheck="false"
-        placeholder="Нажмите на поле, затем долгое нажатие (или правый клик) → «Вставить». Выделения из Word не сохранятся, ссылки распознаются."
+        placeholder="Нажмите на поле и вставьте текст: Ctrl+V (на телефоне — долгое нажатие или правый клик → «Вставить»). Выделения из Word не сохранятся, ссылки распознаются."
         style="flex:1;min-height:120px;padding:9px 10px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;"></textarea>
       <button id="pasteGo" type="button" class="primary" style="align-self:flex-end;">Разобрать</button>
     </div>
@@ -558,24 +558,10 @@ $("#pasteBtn").onclick = async (e) => {
           : { getData: () => "", text: value });
       }
     } catch (err) { /* пусто или нет доступа — поле для ручной вставки */ }
-    return openPasteDialog();
   }
-  try {
-    const items = await navigator.clipboard.read();
-    for (const it of items) {
-      if (it.types.includes("text/html")) {
-        return sendClipboard(await (await it.getType("text/html")));
-      }
-    }
-    for (const it of items) {
-      if (it.types.includes("text/plain")) {
-        return sendClipboard({ getData: () => "", text: await (await it.getType("text/plain")).text() });
-      }
-    }
-    openPasteDialog(); // буфер пуст — вставим руками
-  } catch (err) {
-    openPasteDialog(); // нет доступа к буферу — вставим руками
-  }
+  // на компьютере окно вставки открывается всегда — предсказуемее тихого
+  // чтения буфера; форматирование из Word сохраняет Ctrl+V прямо на странице
+  openPasteDialog();
 };
 
 $("#addBtn").onclick = () => {
