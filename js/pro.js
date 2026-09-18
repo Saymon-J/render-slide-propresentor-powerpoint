@@ -45,6 +45,10 @@ export function initPro(schemaJson, templateBytes) {
     body_font: bodyEl.text.attributes.font.name,
     body_size: bodyEl.text.attributes.font.size,
     body_box: box(bodyEl),
+    // пункты конспекта: слайд-заголовок тем же боксом, что титул, но
+    // спокойнее — Onest-Medium 96 (титульный Forum 200 слишком крупный)
+    point_font: "Onest-Medium",
+    point_size: 96,
     slide_bg: [bg.red, bg.green, bg.blue],
     group_name: "Отрывки",
     // дробление длинного отрывка: строк «высотой» ~line_chars символов
@@ -55,6 +59,7 @@ export function initPro(schemaJson, templateBytes) {
     title_font: THEME.title_font, title_size: THEME.title_size,
     font: THEME.font, ref_size: THEME.ref_size,
     body_font: THEME.body_font, body_size: THEME.body_size,
+    point_font: THEME.point_font, point_size: THEME.point_size,
     line_chars: THEME.line_chars, max_lines: THEME.max_lines,
   };
   return THEME;
@@ -72,6 +77,8 @@ export function applyTheme(o = {}) {
   t.ref_size = +o.ref_size || DEF.ref_size;
   t.body_font = clean(o.body_font) || DEF.body_font;
   t.body_size = +o.body_size || DEF.body_size;
+  t.point_font = clean(o.point_font) || DEF.point_font;
+  t.point_size = +o.point_size || DEF.point_size;
   t.line_chars = Math.max(8, Math.round(DEF.line_chars * DEF.body_size / t.body_size));
   t.max_lines = Math.max(2, Math.round(DEF.max_lines * DEF.body_size / t.body_size));
   return t;
@@ -152,10 +159,10 @@ export function buildPresentation(sermon, uid = defaultUid) {
     [{ rtf: titleRtf, font: t.title_font, size: t.title_size }], uid));
   for (const passage of sermon.passages) {
     if (passage.point) {
-      // пункт конспекта — слайд-заголовок в стиле титула
-      const rtf = buildRtf([[span(passage.label)]], t.title_size, "center", true, t.title_font, t);
+      // пункт конспекта — слайд-заголовок в боксе титула, шрифт пункта
+      const rtf = buildRtf([[span(passage.label)]], t.point_size, "center", false, t.point_font, t);
       addCue(passage.label, slideFrom(t.title_slide,
-        [{ rtf, font: t.title_font, size: t.title_size }], uid));
+        [{ rtf, font: t.point_font, size: t.point_size }], uid));
       continue;
     }
     const refRtf = buildRtf([[span(passage.screen)]], t.ref_size, "left", false, t.font, t);  // координаты — начертанием шрифта, не жирным

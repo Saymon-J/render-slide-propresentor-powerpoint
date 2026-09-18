@@ -155,11 +155,11 @@
   .prev mark { background: #ffe100; color: #000; }
   .prev .empty { color: #9aa3b5; font-style: italic; }
   .prev:focus-within { outline: 1px solid var(--accent); }
-  /* пункт конспекта — слайд-заголовок в стиле титула: крупно, по центру */
+  /* пункт конспекта — слайд-заголовок: по центру, шрифтом пункта темы */
   .prev .pointbox {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     padding: 3%; text-align: center; color: #fff; font-family: Arial, sans-serif;
-    font-weight: 700; line-height: 1.2; overflow: hidden;
+    line-height: 1.2; overflow: hidden;
   }
 
   /* ---------- перестановка слайдов перетаскиванием ---------- */
@@ -246,7 +246,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.6.0 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.6.1 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -317,6 +317,9 @@
         <label for="fBodyFont">Тело отрывка</label>
         <input id="fBodyFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
         <input id="fBodySize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
+        <label for="fPointFont">Пункты конспекта</label>
+        <input id="fPointFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+        <input id="fPointSize" type="number" min="10" max="500" step="5" title="Размер, единицы темы">
       </div>
     </div>
     <datalist id="fontList">
@@ -605,13 +608,15 @@ const THEME_KEY = "ppThemes", THEME_CUR = "ppThemeCurrent";
 const DEFAULT_THEME = "spbcoc";
 // встроенные темы: spbcoc — шаблон «Шаблон для проповедей»; Arial — те же
 // геометрия и размеры, но стандартные шрифты, как у ProPresenter по умолчанию
-const BUILTINS = { [DEFAULT_THEME]: {}, Arial: { title_font: "Arial", font: "Arial", body_font: "Arial" } };
+const BUILTINS = { [DEFAULT_THEME]: {}, Arial: { title_font: "Arial", font: "Arial", body_font: "Arial", point_font: "Arial" } };
 const BUILTIN_LABELS = { [DEFAULT_THEME]: DEFAULT_THEME + " (по умолчанию)", Arial: "Arial (стандарт)" };
-const THEME_KEYS = ["title_font", "title_size", "font", "ref_size", "body_font", "body_size"];
+const THEME_KEYS = ["title_font", "title_size", "font", "ref_size", "body_font", "body_size",
+                    "point_font", "point_size"];
 const THEME_INPUTS = [
   ["fTitleFont", "title_font"], ["fTitleSize", "title_size"],
   ["fRefFont", "font"], ["fRefSize", "ref_size"],
   ["fBodyFont", "body_font"], ["fBodySize", "body_size"],
+  ["fPointFont", "point_font"], ["fPointSize", "point_size"],
 ];
 let curTheme = localStorage.getItem(THEME_CUR) || DEFAULT_THEME;
 let lastBodySize = null;  // изменился размер тела → перебить стихи по слайдам
@@ -774,12 +779,12 @@ function render() {
     prev.className = "prev";
     const th = api.currentTheme();
     if (p.point) {
-      // пункт конспекта — крупный заголовок по центру, стилем титульного слайда
+      // пункт конспекта — заголовок по центру, шрифтом пункта темы
       const pt = document.createElement("div");
       pt.className = "pointbox";
       pt.contentEditable = "true"; pt.spellcheck = false;
-      pt.style.fontFamily = `'${api.displayFont(th.title_font)}', Arial, sans-serif`;
-      pt.style.fontSize = `${(th.title_size / 10.8).toFixed(2)}cqh`;
+      pt.style.fontFamily = `'${api.displayFont(th.point_font)}', Arial, sans-serif`;
+      pt.style.fontSize = `${(th.point_size / 10.8).toFixed(2)}cqh`;
       pt.textContent = p.label;
       pt.onblur = () => {
         p.label = pt.textContent.trim() || "—";
