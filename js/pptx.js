@@ -64,6 +64,11 @@ export async function buildPptx(sermon, theme, outputType = "blob") {
   addText(s, t.title_box, t.title_size, "center", true, [[span(sermon.title.toUpperCase())]], true, titleFont);
   for (const passage of sermon.passages) {
     s = addSlide();
+    if (passage.point) {
+      // пункт конспекта — слайд-заголовок в стиле титула
+      addText(s, t.title_box, t.title_size, "center", true, [[span(passage.label)]], true, titleFont);
+      continue;
+    }
     addText(s, t.ref_box, t.ref_size, "left", true, [[span(passage.screen)]], false, font);
     addText(s, t.body_box, t.body_size, "left", false, passage.paragraphs, false, bodyFont);
   }

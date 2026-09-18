@@ -151,6 +151,13 @@ export function buildPresentation(sermon, uid = defaultUid) {
   addCue(sermon.title, slideFrom(t.title_slide,
     [{ rtf: titleRtf, font: t.title_font, size: t.title_size }], uid));
   for (const passage of sermon.passages) {
+    if (passage.point) {
+      // пункт конспекта — слайд-заголовок в стиле титула
+      const rtf = buildRtf([[span(passage.label)]], t.title_size, "center", true, t.title_font, t);
+      addCue(passage.label, slideFrom(t.title_slide,
+        [{ rtf, font: t.title_font, size: t.title_size }], uid));
+      continue;
+    }
     const refRtf = buildRtf([[span(passage.screen)]], t.ref_size, "left", false, t.font, t);  // координаты — начертанием шрифта, не жирным
     const bodyRtf = buildRtf(passage.paragraphs, t.body_size, "left", false, t.body_font, t);
     addCue(passage.label, slideFrom(t.ref_slide, [

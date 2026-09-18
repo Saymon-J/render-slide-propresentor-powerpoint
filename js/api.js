@@ -36,6 +36,10 @@ function sermonToJson(s, layout) {
   const join = layout !== "lines";
   const passages = [];
   for (const p of s.passages) {
+    if (p.point) {  // пункт конспекта — слайд-заголовок, без раскроя
+      passages.push({ screen: "", label: p.label, paragraphs: [], point: true });
+      continue;
+    }
     for (const chunk of splitParagraphs(p.paragraphs, t.max_lines, t.line_chars, join)) {
       passages.push({ screen: p.screen, label: p.label, paragraphs: parasJson(chunk) });
     }
@@ -53,6 +57,7 @@ function jsonToSermon(d) {
     passages: (d.passages || []).map((p) => ({
       screen: p.screen || "",
       label: p.label || "",
+      point: !!p.point,
       paragraphs: (p.paragraphs || []).map((par) =>
         par.filter((sp) => sp.t).map((sp) => span(sp.t, !!sp.b, !!sp.i, sp.c ?? null, sp.h ?? null))),
     })),
@@ -60,6 +65,7 @@ function jsonToSermon(d) {
 }
 
 const NO_PASSAGES = "В конспекте не найдено ни одного отрывка со ссылкой (например «Ин 3:16»)";
+const hasRefs = (s) => s.passages.some((p) => !p.point);;
 
 export async function parseFile(file, layout = "flow") {
   await init();
@@ -75,7 +81,7 @@ export async function parseFile(file, layout = "flow") {
     throw new ApiError(`Формат ${name.slice(name.lastIndexOf("."))} не поддерживается. Нужен .docx или .txt`);
   }
   const s = parseSermonParagraphs(paragraphs, file.name.replace(/\.[^.]+$/, ""));
-  if (!s.passages.length) throw new ApiError(NO_PASSAGES);
+  if (!hasRefs(s)) throw new ApiError(NO_PASSAGES);
   return sermonToJson(s, layout);
 }
 
@@ -94,7 +100,7 @@ export async function parseText(payload) {
     throw new ApiError("Ожидается {text: ...} или {paragraphs: [[...]]}");
   }
   const s = parseSermonParagraphs(paragraphs);
-  if (!s.passages.length) throw new ApiError(NO_PASSAGES);
+  if (!hasRefs(s)) throw new ApiError(NO_PASSAGES);
   return sermonToJson(s, payload.layout || "flow");
 }
 
@@ -105,6 +111,7 @@ export async function relayout(d) {
   const s = jsonToSermon(d);
   const out = [];
   for (const p of s.passages) {
+    if (p.point) { out.push({ screen: p.screen, label: p.label, paragraphs: [], point: true }); continue; }
     for (const chunk of splitParagraphs(p.paragraphs, t.max_lines, t.line_chars, join)) {
       out.push({ screen: p.screen, label: p.label, paragraphs: parasJson(chunk) });
     }

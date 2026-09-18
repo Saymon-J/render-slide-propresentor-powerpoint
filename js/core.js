@@ -16,7 +16,8 @@ export const WD_HL = {
 // Span — plain-объект {text, bold, italic, color, highlight}
 export const span = (text, bold = false, italic = false, color = null, highlight = null) =>
   ({ text, bold, italic, color, highlight });
-export const passage = (screen, label, paragraphs = []) => ({ screen, label, paragraphs });
+export const passage = (screen, label, paragraphs = [], point = false) =>
+  ({ screen, label, paragraphs, point });
 export const sermon = (title, passages = []) => ({ title, passages });
 
 const SEP_RE = /^[\s*•·—–-]+$/;
@@ -105,6 +106,23 @@ function stripQuoteWrapper(p) {
 // номер стиха в теле: в начале абзаца или после знака препинания (возможно с
 // тире реплики NRT); «40 дней» перед числом без пунктуации — не стих
 const VNUM = /(?:^|(?<=[.,;:!?»])\s)(?:—\s+)?(\d{1,3})(?=\s)/g;
+// пункт конспекта: строка-заголовок вне тела отрывка — «1», «1.», «1. Название»,
+// «II», «V) Название», «А. Название», «Пункт 1»; маркер без разделителя
+// («1 Название») пунктом не считается — так выглядят стихи bible.com (PEND_RE)
+const POINT_MARK = "(?:\\d{1,2}|[IVXLCDM]{1,7}|[А-ЯЁA-Z])";
+const POINT_RE = new RegExp(`^${POINT_MARK}\\s*[.)\\]:—–-]\\s*[:\\s]*(.+)$`);
+const POINT_BARE_RE = new RegExp(`^${POINT_MARK}\\s*[.)\\]:—–-]?$`);
+const POINT_WORD_RE = /^(?:пункт|часть)\s*\d{0,2}\s*[.)\]:—–-]?\s*[:\s]*(.*)$/i;
+const POINT_TRAIL = /[\s.)\]:—–-]+$/;
+
+// Строка-заголовок пункта → Passage-пункт (слайд-заголовок в стиле титула);
+// текст слайда — вся строка как набрана, хвостовой разделитель снимается
+function pointOf(line) {
+  const s = line.trim();
+  if (!(POINT_WORD_RE.test(s) || POINT_RE.test(s) || POINT_BARE_RE.test(s))) return null;
+  const label = s.replace(POINT_TRAIL, "");
+  return label ? passage("", label, [], true) : null;
+}
 
 export function verseRange(paragraphs) {
   // Диапазон номеров стихов тела («11-12») — для хвостовой ссылки без стихов.
@@ -146,6 +164,7 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
     let ref = parseRef(text);
     const tail = parseTailRef(text);
     if (tail) ref = null;  // «Книга, N глава» — всегда координаты, не ведущая ссылка
+    const firstLine = !seenFirst;
     if (!seenFirst) {
       seenFirst = true;
       if (!ref && !tail) title = stripped;
@@ -185,11 +204,17 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
       continue;
     }
 
-    if (!cur && PEND_RE.test(text)) {
-      const clean = mergeSpans(cutSpans(spans, LEAD_PAREN.exec(text)[0].length)
-        .filter((sp) => sp.text.trim()));
-      if (clean.length) cur = passage("", "", [clean]);  // безымянный блок стихов
-      continue;
+    if (!cur) {
+      // пункт конспекта («1.», «II», «Пункт 1») — слайд-заголовок; первая
+      // строка — название проповеди, пунктом не считается
+      const pt = firstLine ? null : pointOf(stripped);
+      if (pt) { passages.push(pt); continue; }
+      if (PEND_RE.test(text)) {
+        const clean = mergeSpans(cutSpans(spans, LEAD_PAREN.exec(text)[0].length)
+          .filter((sp) => sp.text.trim()));
+        if (clean.length) cur = passage("", "", [clean]);  // безымянный блок стихов
+        continue;
+      }
     }
 
     if (cur) {
@@ -205,8 +230,8 @@ export function parseSermonParagraphs(paragraphs, fallbackTitle = "") {
     }
   }
 
-  const kept = passages.filter((p) => p.paragraphs.length);
-  kept.forEach(stripQuoteWrapper);
+  const kept = passages.filter((p) => p.paragraphs.length || p.point);
+  kept.forEach((p) => { if (p.paragraphs.length) stripQuoteWrapper(p); });
   return sermon(cleanTitle(title) || fallbackTitle, kept);
 }
 

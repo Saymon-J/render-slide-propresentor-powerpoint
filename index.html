@@ -155,6 +155,17 @@
   .prev mark { background: #ffe100; color: #000; }
   .prev .empty { color: #9aa3b5; font-style: italic; }
   .prev:focus-within { outline: 1px solid var(--accent); }
+  /* пункт конспекта — слайд-заголовок в стиле титула: крупно, по центру */
+  .prev .pointbox {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 3%; text-align: center; color: #fff; font-family: Arial, sans-serif;
+    font-weight: 700; line-height: 1.2; overflow: hidden;
+  }
+
+  /* ---------- перестановка слайдов перетаскиванием ---------- */
+  .slidecard .head { cursor: grab; }
+  .slidecard.dragging { opacity: .45; }
+  .slidecard.dragover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
   /* ---------- нижний тулбар ---------- */
   .toolbar {
@@ -163,6 +174,11 @@
     padding: 9px 16px; display: flex; justify-content: flex-end; gap: 8px; align-items: center;
   }
   .toolbar .tip { color: var(--muted); font-size: 11px; margin-right: auto; }
+  .toolbar .chk {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    cursor: pointer; user-select: none; white-space: nowrap; margin-right: 4px;
+  }
+  .toolbar .chk input { accent-color: var(--accent); margin: 0; }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
   .seg button { background: transparent; border: none; border-radius: 0; padding: 5px 10px; font-size: 12px; }
   .seg button + button { border-left: 1px solid var(--line); }
@@ -230,7 +246,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.5.1 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.6.0 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -254,7 +270,7 @@
         <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="#888" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
       <div class="big">Перетащите конспект сюда или нажмите для выбора файла</div>
-      <div class="hint">.docx · .txt — ссылки вида «Ин 3:16-21» станут слайдами</div>
+      <div class="hint">.docx · .txt — ссылки вида «Ин 3:16-21» станут слайдами; пункты «1.», «II.», «Пункт 1» — слайдами-заголовками</div>
       <div class="hint"><b>Ctrl+V</b> — вставить из буфера (копируйте из Word — выделения сохранятся)</div>
       <span id="dropStatus" class="hidden"></span>
     </div>
@@ -324,7 +340,10 @@
 </main>
 
 <div class="toolbar hidden" id="toolbar">
-  <span class="tip">Красная кнопка слева выключает слайд из экспорта · × удаляет · текст правится прямо в превью</span>
+  <span class="tip">Красная кнопка слева выключает слайд из экспорта · × удаляет · текст правится прямо в превью · перетащите карточку за заголовок, чтобы поменять порядок</span>
+  <label class="chk hidden" id="pointsWrap" title="Слайды-заголовки пунктов конспекта: «1.», «II», «Пункт 1»">
+    <input type="checkbox" id="pointsChk"> Пункты
+  </label>
   <div class="seg" id="layoutSeg" title="Раскладка стихов в теле слайда">
     <button type="button" data-l="flow">Стихи в строку</button>
     <button type="button" data-l="lines">Каждый стих с новой строки</button>
@@ -376,6 +395,15 @@ const $ = (s) => document.querySelector(s);
 let state = { title: "", passages: [] };
 let addMode = false; // режим добавления: новые отрывки — в конец списка
 let layout = localStorage.getItem("layout") || "flow"; // flow | lines
+let pointsOn = localStorage.getItem("ppPoints") === "1"; // слайды-пункты конспекта
+
+const pointsChk = $("#pointsChk");
+pointsChk.checked = pointsOn;
+pointsChk.onchange = () => {
+  pointsOn = pointsChk.checked;
+  localStorage.setItem("ppPoints", pointsOn ? "1" : "0");
+  render();
+};
 
 const layoutSeg = $("#layoutSeg");
 function setSeg() {
@@ -575,6 +603,10 @@ $("#addBtn").onclick = () => {
 /* ---------- тема оформления: шрифты/размеры, свои темы (офлайн, localStorage) ---------- */
 const THEME_KEY = "ppThemes", THEME_CUR = "ppThemeCurrent";
 const DEFAULT_THEME = "spbcoc";
+// встроенные темы: spbcoc — шаблон «Шаблон для проповедей»; Arial — те же
+// геометрия и размеры, но стандартные шрифты, как у ProPresenter по умолчанию
+const BUILTINS = { [DEFAULT_THEME]: {}, Arial: { title_font: "Arial", font: "Arial", body_font: "Arial" } };
+const BUILTIN_LABELS = { [DEFAULT_THEME]: DEFAULT_THEME + " (по умолчанию)", Arial: "Arial (стандарт)" };
 const THEME_KEYS = ["title_font", "title_size", "font", "ref_size", "body_font", "body_size"];
 const THEME_INPUTS = [
   ["fTitleFont", "title_font"], ["fTitleSize", "title_size"],
@@ -594,11 +626,12 @@ function refreshThemeSel() {
   const sel = $("#themeSel");
   sel.innerHTML = "";
   const add = (v, label) => { const o = document.createElement("option"); o.value = v; o.textContent = label; sel.append(o); };
-  add(DEFAULT_THEME, DEFAULT_THEME + " (по умолчанию)");
-  for (const n of Object.keys(themesMap())) add(n, n);
-  if (curTheme !== DEFAULT_THEME && !themesMap()[curTheme]) curTheme = DEFAULT_THEME;
+  for (const [n, label] of Object.entries(BUILTIN_LABELS)) add(n, label);
+  const m = themesMap();
+  for (const n of Object.keys(m)) if (!BUILTINS[n]) add(n, n);
+  if (!BUILTINS[curTheme] && !m[curTheme]) curTheme = DEFAULT_THEME;
   sel.value = curTheme;
-  $("#themeDel").classList.toggle("hidden", curTheme === DEFAULT_THEME);
+  $("#themeDel").classList.toggle("hidden", !!BUILTINS[curTheme]);
 }
 
 async function applyThemeInputs() {
@@ -612,7 +645,7 @@ async function applyThemeInputs() {
 }
 
 function initThemeUI() {
-  const saved = curTheme !== DEFAULT_THEME ? themesMap()[curTheme] : null;
+  const saved = BUILTINS[curTheme] || themesMap()[curTheme];
   if (saved) api.applyTheme(saved);  // выбранная тема переживает перезагрузку
   setThemeInputs(api.currentTheme());
   lastBodySize = api.currentTheme().body_size;
@@ -625,7 +658,7 @@ THEME_INPUTS.forEach(([id]) => $("#" + id).addEventListener("change", applyTheme
 $("#themeSel").onchange = async () => {
   curTheme = $("#themeSel").value;
   localStorage.setItem(THEME_CUR, curTheme);
-  api.applyTheme(curTheme === DEFAULT_THEME ? {} : themesMap()[curTheme]);
+  api.applyTheme(BUILTINS[curTheme] || themesMap()[curTheme] || {});
   setThemeInputs(api.currentTheme());
   await applyThemeInputs();
   refreshThemeSel();
@@ -634,7 +667,7 @@ $("#themeSel").onchange = async () => {
 $("#themeSave").onclick = () => {
   const name = (prompt("Название темы:", curTheme === DEFAULT_THEME ? "Моя тема" : curTheme) || "").trim();
   if (!name) return;
-  if (name === DEFAULT_THEME) { alert(`«${DEFAULT_THEME}» — тема по умолчанию, выберите другое имя`); return; }
+  if (BUILTINS[name]) { alert(`«${name}» — встроенная тема, выберите другое имя`); return; }
   const m = themesMap();
   m[name] = pickTheme(api.currentTheme());
   localStorage.setItem(THEME_KEY, JSON.stringify(m));
@@ -668,12 +701,17 @@ function spansToHtml(spans) {
   }).join("");
 }
 
+let dragIdx = null;  // индекс перетаскиваемой карточки (или null)
+
 function render() {
+  dragIdx = null;
   $("#titleInput").value = state.title;
   const grid = $("#grid");
   grid.innerHTML = "";
+  $("#pointsWrap").classList.toggle("hidden", !state.passages.some((p) => p.point));
 
   state.passages.forEach((p, idx) => {
+    if (p.point && !pointsOn) return;  // пункты выключены галочкой — карточек нет
     const card = document.createElement("div");
     card.className = "slidecard" + (p.on === false ? " off" : "");
     const head = document.createElement("div");
@@ -705,23 +743,66 @@ function render() {
     };
     head.append(tgl, lbl, del);
 
+    // перестановка слайдов: тащить за заголовок карточки
+    head.draggable = true;
+    head.addEventListener("dragstart", (e) => {
+      dragIdx = idx;
+      e.dataTransfer.effectAllowed = "move";
+      card.classList.add("dragging");
+    });
+    head.addEventListener("dragend", () => {
+      dragIdx = null;
+      grid.querySelectorAll(".slidecard").forEach((c) => c.classList.remove("dragover"));
+    });
+    card.addEventListener("dragover", (e) => {
+      if (dragIdx === null || dragIdx === idx) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      card.classList.add("dragover");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("dragover"));
+    card.addEventListener("drop", (e) => {
+      e.preventDefault();
+      card.classList.remove("dragover");
+      if (dragIdx === null || dragIdx === idx) return;
+      const [moved] = state.passages.splice(dragIdx, 1);
+      state.passages.splice(idx, 0, moved);
+      render();
+    });
+
     const prev = document.createElement("div");
     prev.className = "prev";
     const th = api.currentTheme();
-    const ref = document.createElement("div");
-    ref.className = "ref"; ref.contentEditable = "true"; ref.spellcheck = false;
-    ref.style.fontFamily = `'${api.displayFont(th.font)}', Arial, sans-serif`;
-    ref.style.fontSize = `${(th.ref_size / 10.8).toFixed(2)}cqh`;  // 1080 ед. темы = 100 cqh
-    ref.textContent = p.screen;
-    ref.onblur = () => { p.screen = ref.textContent.trim(); };
-    const body = document.createElement("div");
-    body.className = "bodybox";
-    body.contentEditable = "true"; body.spellcheck = false;
-    body.style.fontFamily = `'${api.displayFont(th.body_font)}', Arial, sans-serif`;
-    body.style.fontSize = `${(th.body_size / 10.8).toFixed(2)}cqh`;
-    body.innerHTML = p.paragraphs.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
-    body.onblur = () => { p.paragraphs = readEditable(body); };
-    prev.append(ref, body);
+    if (p.point) {
+      // пункт конспекта — крупный заголовок по центру, стилем титульного слайда
+      const pt = document.createElement("div");
+      pt.className = "pointbox";
+      pt.contentEditable = "true"; pt.spellcheck = false;
+      pt.style.fontFamily = `'${api.displayFont(th.title_font)}', Arial, sans-serif`;
+      pt.style.fontSize = `${(th.title_size / 10.8).toFixed(2)}cqh`;
+      pt.textContent = p.label;
+      pt.onblur = () => {
+        p.label = pt.textContent.trim() || "—";
+        lbl.textContent = p.label;
+        lbl.title = p.label;
+      };
+      prev.append(pt);
+    } else {
+      const ref = document.createElement("div");
+      ref.className = "ref"; ref.contentEditable = "true"; ref.spellcheck = false;
+      ref.style.fontFamily = `'${api.displayFont(th.font)}', Arial, sans-serif`;
+      ref.style.fontSize = `${(th.ref_size / 10.8).toFixed(2)}cqh`;  // 1080 ед. темы = 100 cqh
+      ref.textContent = p.screen;
+      ref.onblur = () => { p.screen = ref.textContent.trim(); };
+      const body = document.createElement("div");
+      body.className = "bodybox";
+      body.contentEditable = "true"; body.spellcheck = false;
+      body.style.fontFamily = `'${api.displayFont(th.body_font)}', Arial, sans-serif`;
+      body.style.fontSize = `${(th.body_size / 10.8).toFixed(2)}cqh`;
+      body.innerHTML = p.paragraphs.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
+      body.onblur = () => { p.paragraphs = readEditable(body); };
+      prev.append(ref, body);
+    }
 
     card.append(head, prev);
     grid.append(card);
@@ -760,8 +841,9 @@ function readEditable(el) {
 }
 
 function updMeta() {
-  const on = state.passages.filter((p) => p.on !== false).length;
-  $("#meta").textContent = `Слайдов: ${state.passages.length} · включено: ${on}`;
+  const vis = state.passages.filter((p) => pointsOn || !p.point);
+  const on = vis.filter((p) => p.on !== false).length;
+  $("#meta").textContent = `Слайдов: ${vis.length} · включено: ${on}`;
 }
 
 $("#againBtn").onclick = () => location.reload();
@@ -773,7 +855,7 @@ async function doExport(fmt) {
   btn.innerHTML = '<span class="spinner"></span> Собираю…';
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
   const payload = { title: $("#titleInput").value, format: fmt,
-                    passages: state.passages.filter((p) => p.on !== false),
+                    passages: state.passages.filter((p) => p.on !== false && (pointsOn || !p.point)),
                     theme: pickTheme(api.currentTheme()) };
   const fname = (payload.title || "Проповедь").replace(/[\\/:*?"<>|]/g, "").trim() + "." + fmt;
   try {
