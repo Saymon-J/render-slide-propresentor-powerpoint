@@ -328,6 +328,31 @@ export function splitParagraphs(paragraphs, maxLines, lineChars, joinVerses = tr
   return out;
 }
 
+// номера стихов к снятию: в начале абзаца или после знака препинания
+// (возможно с тире реплики NRT); числа без пунктуации («40 дней») не трогаем
+const NUM_INLINE = /([.,;:!?»])\s+(?:—\s+)?\d{1,3}(?=\s)/g;
+const NUM_LEAD = /^\s*\d{1,3}(?:\s+|$)/;
+
+export function stripVerseNumbers(paragraphs) {
+  // Убрать номера стихов из тела отрывка — режим «без номеров» в UI.
+  // Возвращает копию; исходные спаны не меняются, переключение обратимо.
+  // Понимает оба формата спанов: ядра {text,…} и UI/JSON {t,b,i,c,h}.
+  return paragraphs.map((par) => {
+    const out = [];
+    for (const sp of par) {
+      const key = sp.text !== undefined ? "text" : "t";
+      let t = sp.text ?? sp.t ?? "";
+      if (!t.trim()) continue;
+      const prev = out.length ? (out[out.length - 1].text ?? out[out.length - 1].t) : null;
+      const afterPunct = prev !== null && /[.,;:!?»]\s*$/.test(prev);
+      if ((!out.length || afterPunct) && NUM_LEAD.test(t)) t = t.replace(NUM_LEAD, "");
+      t = t.replace(NUM_INLINE, "$1");
+      if (t.trim()) out.push({ ...sp, [key]: t.replace(/^\s+/, "") });
+    }
+    return out;
+  });
+}
+
 // ---------- RTF (export.py) ----------
 
 function esc(text) {

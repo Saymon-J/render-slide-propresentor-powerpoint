@@ -227,8 +227,11 @@
     display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
     gap: 8px 14px; padding: 0 10px 10px; border-top: 1px solid var(--line);
   }
-  .cgrid .cap3 { grid-column: 1 / -1; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--muted); font-weight: 600; padding-top: 8px; }
+  .cgrid .cap3 { font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; }
+  .cgrid .caph { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding-top: 8px; }
+  .cgrid .caph .cap3 { flex: 1; }
+  .cgrid .caph button { padding: 4px 10px; font-size: 11px; }
   .cgrid label { display: grid; grid-template-columns: 1fr 34px; align-items: center; gap: 6px;
     font-size: 12px; color: var(--muted); cursor: pointer; min-width: 0; }
   .cgrid input[type="color"] {
@@ -286,7 +289,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.7.1 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.8.0 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -378,7 +381,10 @@
         </div>
       </div>
       <div class="cgrid">
-        <span class="cap3">Цвета</span>
+        <div class="caph">
+          <span class="cap3">Цвета</span>
+          <button id="colorsReset" type="button" title="Чёрный фон и белый текст">Сбросить</button>
+        </div>
         <label>Фон слайда <input id="fBgColor" type="color" title="Фон всех слайдов"></label>
         <label>Название <input id="fTitleColor" type="color" title="Текст титульного слайда"></label>
         <label>Координаты <input id="fRefColor" type="color" title="Шапка слайда отрывка"></label>
@@ -408,6 +414,9 @@
 
 <div class="toolbar hidden" id="toolbar">
   <span class="tip">Красная кнопка слева выключает слайд из экспорта · × удаляет · текст правится прямо в превью · перетащите карточку за заголовок, чтобы поменять порядок</span>
+  <label class="chk" id="numsWrap" title="Номера стихов в тексте отрывка">
+    <input type="checkbox" id="numsChk"> Номера стихов
+  </label>
   <label class="chk hidden" id="pointsWrap" title="Слайды-заголовки пунктов конспекта: «1.», «II», «Пункт 1»">
     <input type="checkbox" id="pointsChk"> Пункты
   </label>
@@ -470,6 +479,15 @@ let state = { title: "", passages: [] };
 let addMode = false; // режим добавления: новые отрывки — в конец списка
 let layout = localStorage.getItem("layout") || "flow"; // flow | lines
 let pointsOn = localStorage.getItem("ppPoints") === "1"; // слайды-пункты конспекта
+let verseNums = localStorage.getItem("ppVerseNums") !== "0"; // номера стихов в теле
+
+const numsChk = $("#numsChk");
+numsChk.checked = verseNums;
+numsChk.onchange = () => {
+  verseNums = numsChk.checked;
+  localStorage.setItem("ppVerseNums", verseNums ? "1" : "0");
+  render();
+};
 
 const pointsChk = $("#pointsChk");
 pointsChk.checked = pointsOn;
@@ -752,6 +770,16 @@ function initThemeUI() {
 $("#themeBtn").onclick = () => $("#themePanel").classList.toggle("hidden");
 THEME_INPUTS.forEach(([id]) => $("#" + id).addEventListener("change", applyThemeInputs));
 
+/* сброс цветов темы: чёрный фон, белый текст — как у шаблона */
+$("#colorsReset").onclick = () => {
+  for (const [id, v] of [["fBgColor", "#000000"], ["fTitleColor", "#ffffff"],
+                         ["fRefColor", "#ffffff"], ["fBodyColor", "#ffffff"],
+                         ["fPointColor", "#ffffff"]]) {
+    $("#" + id).value = v;
+  }
+  applyThemeInputs();
+};
+
 $("#themeSel").onchange = async () => {
   curTheme = $("#themeSel").value;
   localStorage.setItem(THEME_CUR, curTheme);
@@ -923,7 +951,9 @@ function render() {
       body.style.fontFamily = `'${api.displayFont(th.body_font)}', Arial, sans-serif`;
       body.style.fontSize = `${(th.body_size / 10.8).toFixed(2)}cqh`;
       body.style.color = "#" + th.body_color;
-      body.innerHTML = p.paragraphs.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
+      // номера стихов выключены — превью и правки идут без номеров (WYSIWYG)
+      const shown = verseNums ? p.paragraphs : api.stripVerseNumbers(p.paragraphs);
+      body.innerHTML = shown.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
       body.onblur = () => { p.paragraphs = readEditable(body); saveState(); };
       prev.append(ref, body);
     }
@@ -991,7 +1021,9 @@ async function doExport(fmt) {
   btn.innerHTML = '<span class="spinner"></span> Собираю…';
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
   const payload = { title: $("#titleInput").value, format: fmt,
-                    passages: state.passages.filter((p) => p.on !== false && (pointsOn || !p.point || p.manual)),
+                    passages: state.passages
+                      .filter((p) => p.on !== false && (pointsOn || !p.point || p.manual))
+                      .map((p) => (verseNums || p.point ? p : { ...p, paragraphs: api.stripVerseNumbers(p.paragraphs) })),
                     theme: pickTheme(api.currentTheme()) };
   const fname = (payload.title || "Проповедь").replace(/[\\/:*?"<>|]/g, "").trim() + "." + fmt;
   try {

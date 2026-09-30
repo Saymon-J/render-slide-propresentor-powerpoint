@@ -1,6 +1,6 @@
 // Мост UI ↔ JS-ядро: те же формы запросов/ответов, что были у Flask-эндпоинтов
 // (api/parse, api/parse/text, api/relayout, api/export). Вся логика — на устройстве.
-import { span, splitParagraphs, parseSermonParagraphs } from "./core.js";
+import { span, splitParagraphs, parseSermonParagraphs, stripVerseNumbers } from "./core.js";
 import { initPro, theme, buildPresentation, applyTheme } from "./pro.js";
 import { buildPptx } from "./pptx.js";
 import { docxParagraphs, txtParagraphs } from "./docx.js";
@@ -8,7 +8,7 @@ import { docxParagraphs, txtParagraphs } from "./docx.js";
 export class ApiError extends Error {}
 
 // тема оформления: шрифты/размеры для UI; applyTheme меняет тему ядра
-export { applyTheme, theme as currentTheme };
+export { applyTheme, theme as currentTheme, stripVerseNumbers };
 
 // «Onest-Medium» → «Onest Medium»: превью подставляет имя семейства, как pptx.js
 export const displayFont = (name) => name.replace(/-Regular$/, "").replace("-", " ");
