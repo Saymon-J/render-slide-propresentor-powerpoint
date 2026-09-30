@@ -210,21 +210,27 @@
   .subpanel .shead .cap2 { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
   .subpanel .shead .right2 { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .subpanel .shead button { padding: 5px 10px; font-size: 12px; }
-  .tgrid { display: grid; grid-template-columns: max-content 1fr 86px; gap: 8px 10px; align-items: center; padding: 10px; }
-  .tgrid label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  /* ---------- панель темы: карточки-настройки, ровные на любой ширине ---------- */
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; padding: 10px; }
+  .tgrid .field { display: grid; gap: 4px; min-width: 0; }
+  .tgrid .field label { font-size: 11px; color: var(--muted); white-space: normal; }
+  .tgrid .pair { display: flex; gap: 8px; }
+  .tgrid .pair input[type="text"] { flex: 1 1 auto; min-width: 0; }
+  .tgrid .pair input[type="number"] { flex: 0 0 74px; }
   .tgrid input, #themeSel {
     padding: 6px 8px; font: inherit; color: var(--ink);
     background: var(--bg); border: 1px solid var(--line); border-radius: 5px; min-width: 0;
   }
-  /* цвета темы: строка пикеров под сеткой шрифтов */
+  #themeSel { flex: 1 1 130px; }
+  /* цвета темы: сетка самоподстраивается под ширину, пикеры выровнены по краю */
   .cgrid {
-    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
-    padding: 0 10px 10px; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    gap: 8px 14px; padding: 0 10px 10px; border-top: 1px solid var(--line);
   }
-  .cgrid .cap3 { width: 100%; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  .cgrid .cap3 { grid-column: 1 / -1; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
     color: var(--muted); font-weight: 600; padding-top: 8px; }
-  .cgrid label { display: inline-flex; gap: 6px; align-items: center;
-    font-size: 12px; color: var(--muted); cursor: pointer; }
+  .cgrid label { display: grid; grid-template-columns: 1fr 34px; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted); cursor: pointer; min-width: 0; }
   .cgrid input[type="color"] {
     width: 34px; height: 24px; padding: 0; border: 1px solid var(--line);
     border-radius: 4px; background: none; cursor: pointer;
@@ -248,15 +254,18 @@
       padding: 8px 10px calc(8px + var(--safe-bottom));
     }
     .toolbar .tip { display: none; }
-    .toolbar button { padding: 9px 12px; font-size: 12px; }
+    .toolbar button { padding: 9px 12px; font-size: 12px; flex: 1 1 calc(50% - 6px); }
+    .toolbar button.primary { flex-basis: calc(100% - 6px); }  /* главный экспорт — на всю строку */
+    .toolbar .chk { flex: 1 1 calc(50% - 6px); justify-content: center; }
     .seg { width: 100%; justify-content: stretch; }
     .seg button { flex: 1; padding: 9px 6px; }
     button { min-height: 44px; }
     .del { min-height: 36px; min-width: 36px; font-size: 19px; }
     .bar { padding: 8px 10px; }
+    .bar label { flex-basis: 100%; }  /* подпись названия — над полем, не рядом */
     #titleInput { min-width: 0; width: 100%; }
-    .tgrid { grid-template-columns: 1fr 86px; }
-    .tgrid label { grid-column: 1 / -1; }
+    /* заголовок панели темы: select и кнопки — отдельной полной строкой */
+    .subpanel .shead .right2 { flex-basis: 100%; }
   }
 </style>
 </head>
@@ -277,7 +286,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.7.0 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.7.1 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -339,18 +348,34 @@
         </span>
       </div>
       <div class="tgrid">
-        <label for="fTitleFont">Название (титульный слайд)</label>
-        <input id="fTitleFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
-        <input id="fTitleSize" type="number" min="20" max="500" step="5" title="Размер, единицы темы">
-        <label for="fRefFont">Координаты (шапка слайда)</label>
-        <input id="fRefFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
-        <input id="fRefSize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
-        <label for="fBodyFont">Тело отрывка</label>
-        <input id="fBodyFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
-        <input id="fBodySize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
-        <label for="fPointFont">Пункты конспекта</label>
-        <input id="fPointFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
-        <input id="fPointSize" type="number" min="10" max="500" step="5" title="Размер, единицы темы">
+        <div class="field">
+          <label for="fTitleFont">Название (титульный слайд)</label>
+          <div class="pair">
+            <input id="fTitleFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+            <input id="fTitleSize" type="number" min="20" max="500" step="5" title="Размер, единицы темы">
+          </div>
+        </div>
+        <div class="field">
+          <label for="fRefFont">Координаты (шапка слайда)</label>
+          <div class="pair">
+            <input id="fRefFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+            <input id="fRefSize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
+          </div>
+        </div>
+        <div class="field">
+          <label for="fBodyFont">Тело отрывка</label>
+          <div class="pair">
+            <input id="fBodyFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+            <input id="fBodySize" type="number" min="10" max="200" step="5" title="Размер, единицы темы">
+          </div>
+        </div>
+        <div class="field">
+          <label for="fPointFont">Пункты конспекта</label>
+          <div class="pair">
+            <input id="fPointFont" type="text" list="fontList" autocomplete="off" spellcheck="false" placeholder="Шрифт">
+            <input id="fPointSize" type="number" min="10" max="500" step="5" title="Размер, единицы темы">
+          </div>
+        </div>
       </div>
       <div class="cgrid">
         <span class="cap3">Цвета</span>
