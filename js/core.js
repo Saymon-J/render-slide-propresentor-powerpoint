@@ -243,13 +243,31 @@ const VERSE_END = /(?<=[.,;:!?»])\s+(?:—\s+)?(?=\d{1,3}\s)/g;
 const VERSE_START = /^\d{1,3}(\s|$)/;
 
 export function lighten(rgb) {
-  // Тёмные цвета конспекта осветлить — иначе нечитаемы на тёмном фоне.
+  // Тёмные цвета конспекта осветлить — иначе нечитаемо на тёмном фоне.
   let c = [0, 2, 4].map((i) => parseInt(rgb.slice(i, i + 2), 16));
   const lum = (t) => 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2];
   while (lum(c) < 110) {  // ponytail: порог на глаз; дальше — настройка темы
     c = c.map((v) => Math.min(255, v + Math.floor((255 - v) / 3) + 8));
   }
   return c;
+}
+
+function darken(rgb) {
+  // Зеркало lighten: на светлый фон тёмные цвета затемнить.
+  let c = [...rgb];
+  const lum = (t) => 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2];
+  while (lum(c) > 110) {
+    c = c.map((v) => Math.max(0, v - Math.floor(v / 3) - 8));
+  }
+  return c;
+}
+
+// цвет спана конспекта подогнать под фон темы: тёмный фон — осветлить,
+// светлый — затемнить (bg — [r,g,b] в 0..1, как slide_bg темы)
+export function adjustToBg(rgb, bg) {
+  const l = bg ? 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2] : 0;
+  if (l <= 0.55) return lighten(rgb);
+  return darken([0, 2, 4].map((i) => parseInt(rgb.slice(i, i + 2), 16)));
 }
 
 function verseUnits(para) {
@@ -327,13 +345,16 @@ const hexToPct = (rgb) => rgb.map((v) => `\\c${Math.round(v * 100000 / 255)}`).j
 const rgbEq = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 const WHITE = [255, 255, 255];
 
-export function buildRtf(paragraphs, sizePt, align = "left", baseBold = false, font, theme) {
+export function buildRtf(paragraphs, sizePt, align = "left", baseBold = false, font, theme, baseColor) {
   // RTF в формате writer'а ProPresenter 7 (кириллица через \uNNNN ?).
+  // baseColor — [r,g,b] цвет текста темы; спаны со своим цветом перекрывают
+  // его (подгоняются под фон темы). ponytail: порог контраста на глаз.
   font = font || theme.font;
-  const colors = [WHITE];  // RTF-индекс 1: белый текст
+  const base = baseColor || WHITE;
+  const colors = [base];  // RTF-индекс 1: цвет темы
   const idx = new Map();
 
-  const colorId = (sp) => (sp.color ? lighten(sp.color) : WHITE);
+  const colorId = (sp) => (sp.color ? adjustToBg(sp.color, theme.slide_bg) : base);
   const hlId = (sp) => {
     if (!sp.highlight) return 0;  // 0 = без фона; PP игнорирует альфу в expandedcolortbl
     const key = `hl|${sp.highlight}`;
@@ -345,7 +366,7 @@ export function buildRtf(paragraphs, sizePt, align = "left", baseBold = false, f
   };
   const cfId = (sp) => {
     const c = colorId(sp);
-    if (rgbEq(c, WHITE)) return 1;
+    if (rgbEq(c, base)) return 1;
     const key = `cf|${c.join(",")}`;
     if (!idx.has(key)) {
       colors.push(c);

@@ -37,7 +37,7 @@ function sermonToJson(s, layout) {
   const passages = [];
   for (const p of s.passages) {
     if (p.point) {  // пункт конспекта — слайд-заголовок, без раскроя
-      passages.push({ screen: "", label: p.label, paragraphs: [], point: true });
+      passages.push({ screen: "", label: p.label, paragraphs: [], point: true, manual: !!p.manual });
       continue;
     }
     for (const chunk of splitParagraphs(p.paragraphs, t.max_lines, t.line_chars, join)) {
@@ -58,6 +58,7 @@ function jsonToSermon(d) {
       screen: p.screen || "",
       label: p.label || "",
       point: !!p.point,
+      manual: !!p.manual,
       paragraphs: (p.paragraphs || []).map((par) =>
         par.filter((sp) => sp.t).map((sp) => span(sp.t, !!sp.b, !!sp.i, sp.c ?? null, sp.h ?? null))),
     })),
@@ -111,7 +112,7 @@ export async function relayout(d) {
   const s = jsonToSermon(d);
   const out = [];
   for (const p of s.passages) {
-    if (p.point) { out.push({ screen: p.screen, label: p.label, paragraphs: [], point: true }); continue; }
+    if (p.point) { out.push({ screen: p.screen, label: p.label, paragraphs: [], point: true, manual: !!p.manual }); continue; }
     for (const chunk of splitParagraphs(p.paragraphs, t.max_lines, t.line_chars, join)) {
       out.push({ screen: p.screen, label: p.label, paragraphs: parasJson(chunk) });
     }

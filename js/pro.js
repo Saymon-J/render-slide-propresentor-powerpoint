@@ -49,6 +49,12 @@ export function initPro(schemaJson, templateBytes) {
     // спокойнее — Onest-Medium 96 (титульный Forum 200 слишком крупный)
     point_font: "Onest-Medium",
     point_size: 96,
+    // цвета темы (RRGGBB): фон слайда и текст элементов
+    bg_color: "000000",
+    title_color: "FFFFFF",
+    ref_color: "FFFFFF",
+    body_color: "FFFFFF",
+    point_color: "FFFFFF",
     slide_bg: [bg.red, bg.green, bg.blue],
     group_name: "Отрывки",
     // дробление длинного отрывка: строк «высотой» ~line_chars символов
@@ -60,17 +66,21 @@ export function initPro(schemaJson, templateBytes) {
     font: THEME.font, ref_size: THEME.ref_size,
     body_font: THEME.body_font, body_size: THEME.body_size,
     point_font: THEME.point_font, point_size: THEME.point_size,
+    bg_color: THEME.bg_color, title_color: THEME.title_color,
+    ref_color: THEME.ref_color, body_color: THEME.body_color,
+    point_color: THEME.point_color,
     line_chars: THEME.line_chars, max_lines: THEME.max_lines,
   };
   return THEME;
 }
 
 export function applyTheme(o = {}) {
-  // Тема пользователя: шрифты/размеры (пустое — вернуть spbcoc). Дробление
+  // Тема пользователя: шрифты/размеры/цвета (пустое — вернуть spbcoc). Дробление
   // пересчитывается линейно под размер тела — ponytail: линейная прикидка,
   // не точная метрика шрифта под бокс темы
   const t = T();
   const clean = (s) => (s || "").replace(/[;{}\\]/g, "").trim();  // не ломать RTF fonttbl
+  const hex6 = (s) => (/^[0-9a-fA-F]{6}$/.test(s || "") ? s.toUpperCase() : null);
   t.title_font = clean(o.title_font) || DEF.title_font;
   t.title_size = +o.title_size || DEF.title_size;
   t.font = clean(o.font) || DEF.font;
@@ -79,6 +89,12 @@ export function applyTheme(o = {}) {
   t.body_size = +o.body_size || DEF.body_size;
   t.point_font = clean(o.point_font) || DEF.point_font;
   t.point_size = +o.point_size || DEF.point_size;
+  t.bg_color = hex6(o.bg_color) || DEF.bg_color;
+  t.title_color = hex6(o.title_color) || DEF.title_color;
+  t.ref_color = hex6(o.ref_color) || DEF.ref_color;
+  t.body_color = hex6(o.body_color) || DEF.body_color;
+  t.point_color = hex6(o.point_color) || DEF.point_color;
+  t.slide_bg = [0, 2, 4].map((i) => parseInt(t.bg_color.slice(i, i + 2), 16) / 255);
   t.line_chars = Math.max(8, Math.round(DEF.line_chars * DEF.body_size / t.body_size));
   t.max_lines = Math.max(2, Math.round(DEF.max_lines * DEF.body_size / t.body_size));
   return t;
@@ -97,6 +113,8 @@ function slideFrom(tmpl, items, uid) {
   const ps = PS.create();
   ps.base_slide = clone(Slide, tmpl);
   ps.base_slide.uuid = uid();
+  const bgc = T().slide_bg;  // фон темы, не шаблона
+  ps.base_slide.background_color = { red: bgc[0], green: bgc[1], blue: bgc[2], alpha: 1.0 };
   const wrapped = [...ps.base_slide.elements]
     .sort((a, b) => a.element.bounds.origin.y - b.element.bounds.origin.y);
   ps.base_slide.elements = [];
@@ -152,21 +170,27 @@ export function buildPresentation(sermon, uid = defaultUid) {
     cueIds.push(cue.uuid);
   };
 
+  // цвет темы «RRGGBB» → [r,g,b] для buildRtf
+  const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   // заголовок капсом текстом: атрибут Capitalization=ALL_CAPS PP при импорте
   // не отрисовывает, рендер идёт по RTF
-  const titleRtf = buildRtf([[span(sermon.title.toUpperCase())]], t.title_size, "center", true, t.title_font, t);
+  const titleRtf = buildRtf([[span(sermon.title.toUpperCase())]], t.title_size, "center", true,
+    t.title_font, t, rgb(t.title_color));
   addCue(sermon.title, slideFrom(t.title_slide,
     [{ rtf: titleRtf, font: t.title_font, size: t.title_size }], uid));
   for (const passage of sermon.passages) {
     if (passage.point) {
       // пункт конспекта — слайд-заголовок в боксе титула, шрифт пункта
-      const rtf = buildRtf([[span(passage.label)]], t.point_size, "center", false, t.point_font, t);
-      addCue(passage.label, slideFrom(t.title_slide,
+      const rtf = buildRtf([[span(passage.label)]], t.point_size, "center", false,
+        t.point_font, t, rgb(t.point_color));
+      addCue(passage.label || "Слайд", slideFrom(t.title_slide,
         [{ rtf, font: t.point_font, size: t.point_size }], uid));
       continue;
     }
-    const refRtf = buildRtf([[span(passage.screen)]], t.ref_size, "left", false, t.font, t);  // координаты — начертанием шрифта, не жирным
-    const bodyRtf = buildRtf(passage.paragraphs, t.body_size, "left", false, t.body_font, t);
+    const refRtf = buildRtf([[span(passage.screen)]], t.ref_size, "left", false, t.font, t,
+      rgb(t.ref_color));  // координаты — начертанием шрифта, не жирным
+    const bodyRtf = buildRtf(passage.paragraphs, t.body_size, "left", false, t.body_font, t,
+      rgb(t.body_color));
     addCue(passage.label, slideFrom(t.ref_slide, [
       { rtf: refRtf, font: t.font, size: t.ref_size },
       { rtf: bodyRtf, font: t.body_font, size: t.body_size },
