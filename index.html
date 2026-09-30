@@ -218,7 +218,7 @@
   .tgrid .pair input[type="text"] { flex: 1 1 auto; min-width: 0; }
   .tgrid .pair input[type="number"] { flex: 0 0 74px; }
   .tgrid input, #themeSel {
-    padding: 6px 8px; font: inherit; color: var(--ink);
+    padding: 6px 8px; font: inherit; font-size: 14px; color: var(--ink);
     background: var(--bg); border: 1px solid var(--line); border-radius: 5px; min-width: 0;
   }
   #themeSel { flex: 1 1 130px; }
@@ -267,6 +267,10 @@
     .bar { padding: 8px 10px; }
     .bar label { flex-basis: 100%; }  /* подпись названия — над полем, не рядом */
     #titleInput { min-width: 0; width: 100%; }
+    /* поля выбора/ввода крупнее; 16px — порог, ниже которого iOS зумит страницу при фокусе */
+    .tgrid input, #themeSel, #titleInput, #pasteArea, .cgrid label { font-size: 16px; }
+    .cgrid .caph button { font-size: 13px; }
+    .toolbar .chk { font-size: 13px; }
     /* заголовок панели темы: select и кнопки — отдельной полной строкой */
     .subpanel .shead .right2 { flex-basis: 100%; }
   }
@@ -289,7 +293,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.8.0 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.8.1 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
