@@ -204,7 +204,9 @@ export function findBook(raw) {
 // ponytail: книга не длиннее 40 символов («Святое благовествование от Матфея» = 32) — больше не пытаемся.
 const MAX_BOOK = 40;
 const NUM_RE = /[1-3][\s.-]*/y;
-const CHAP_RE = /\d+(?:\s*[:.]\s*\d+(?:\s*[-–—,]\s*\d+)*)?/y;
+// глав и стихов длиннее трёх цифр не бывает; «\d+» съедал склейку диапазона
+// с номером первого стиха без пробела («4:35-4135» = «4:35-41» + стих 35)
+const CHAP_RE = /\d{1,3}(?:\s*[:.]\s*\d{1,3}(?:\s*[-–—,]\s*\d{1,3})*)?/y;
 
 // \b в JS не работает с кириллицей — границу слова даём лукэхедом
 const TAIL_RE = /^[\s,;:]*(\d{1,3})(?:\s*[:.]\s*(\d+(?:\s*[-–—,;]\s*\d+)*))?\s*(?:глав[а-яё]*|гл)(?![а-яёa-z]).*$/i;
@@ -246,21 +248,54 @@ function matchAt(re, s, pos) {
   return m && m.index === pos ? m : null;
 }
 
+function splitGlued(s, text, end) {
+  // Ссылка склеена с номером первого стиха без пробела («Мк 4:35-4135 В тот…»,
+  // перенос из bible-приложений): цифробег длиннее трёх цифр стихом не бывает —
+  // режем, номер стиха возвращается в тело. Обычно он равен первому стиху ссылки.
+  // ponytail: склейка одиночного стиха без диапазона («4:1635») неоднозначна —
+  // режем по последней цифре; триггер — цифра за совпадением или стих > 176
+  // (длиннее 176 стихов нет ни в одной книге Библии)
+  const follow = /\d/.test(s[end] ?? "") ? (s.slice(end).match(/^\d+/) ?? [""])[0] : "";
+  const si = Math.max(text.lastIndexOf(":"), text.lastIndexOf("."));
+  if (si < 0) return follow ? [text + follow, end + follow.length] : null;  // глава без стихов — цифры к главе, как раньше
+  const tail = (text.match(/\d+$/) ?? [""])[0];
+  const vs = text.slice(si + 1);
+  const first = (vs.match(/\d+/) ?? [""])[0];
+  const run = tail + follow;
+  const L = run.length;
+  const range = /[-–—,]/.test(vs);
+  if (!follow && +run <= 176) return null;  // настоящий стих — резать нечего
+  const ok = (k) => k >= 1 && k <= 3 && L - k >= 1 && L - k <= 3
+    && (!range || +run.slice(0, L - k) >= +first);  // диапазон вверх — иначе это не конец
+  const cand = [];
+  if (run.endsWith(first)) cand.push(first.length);  // номер стиха тела == первому стиху ссылки
+  if (!range) cand.push(L - first.length);  // одиночный стих остаётся целым
+  cand.push(2, 1, 3);
+  const k = cand.find(ok);
+  return k ? [text.slice(0, text.length - tail.length) + run.slice(0, L - k),
+              end - tail.length + L - k] : null;
+}
+
 function parseChapters(s) {
   // «1:1-14; 4:1-5» или «2» из начала s → [каноническая запись, потреблено символов]
   const matches = [];
   let m = matchAt(CHAP_RE, s, 0);
-  if (!m || (m[0].length < s.length && !AFTER.includes(s[m[0].length]))) return null;
-  matches.push(m[0]);
-  let pos = m[0].length;
+  if (!m) return null;
+  const gl = splitGlued(s, m[0], m[0].length);
+  const end0 = gl ? gl[1] : m[0].length;
+  if (!gl && end0 < s.length && !AFTER.includes(s[end0])) return null;
+  matches.push(gl ? gl[0] : m[0]);
+  let pos = end0;
   for (;;) {
     const nxt = matchAt(/\s*;\s*/y, s, pos);
     if (!nxt) break;
-    const m2 = matchAt(CHAP_RE, s, pos + nxt[0].length);
+    const at = pos + nxt[0].length;
+    const m2 = matchAt(CHAP_RE, s, at);
     if (!m2) break;
-    const end = pos + nxt[0].length + m2[0].length;
-    if (end < s.length && !AFTER.includes(s[end])) break;
-    matches.push(m2[0]);
+    const gl2 = splitGlued(s, m2[0], at + m2[0].length);
+    const end = gl2 ? gl2[1] : at + m2[0].length;
+    if (!gl2 && end < s.length && !AFTER.includes(s[end])) break;
+    matches.push(gl2 ? gl2[0] : m2[0]);
     pos = end;
   }
   if (s[pos] === ":") pos += 1;  // mybible «стих: текст» — двоеточие не должно попасть в тело
