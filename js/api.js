@@ -1,6 +1,6 @@
 // Мост UI ↔ JS-ядро: те же формы запросов/ответов, что были у Flask-эндпоинтов
 // (api/parse, api/parse/text, api/relayout, api/export). Вся логика — на устройстве.
-import { span, splitParagraphs, parseSermonParagraphs, stripVerseNumbers } from "./core.js";
+import { span, splitParagraphs, parseSermonParagraphs, stripVerseNumbers, superscriptVerseNumbers } from "./core.js";
 import { initPro, theme, buildPresentation, applyTheme } from "./pro.js";
 import { buildPptx } from "./pptx.js";
 import { docxParagraphs, txtParagraphs } from "./docx.js";
@@ -8,7 +8,7 @@ import { docxParagraphs, txtParagraphs } from "./docx.js";
 export class ApiError extends Error {}
 
 // тема оформления: шрифты/размеры для UI; applyTheme меняет тему ядра
-export { applyTheme, theme as currentTheme, stripVerseNumbers };
+export { applyTheme, theme as currentTheme, stripVerseNumbers, superscriptVerseNumbers };
 
 // «Onest-Medium» → «Onest Medium»: превью подставляет имя семейства, как pptx.js
 export const displayFont = (name) => name.replace(/-Regular$/, "").replace("-", " ");
@@ -29,7 +29,7 @@ export function init() {
 }
 
 const parasJson = (paras) => paras.map((par) => par.map((sp) =>
-  ({ t: sp.text, b: sp.bold, i: sp.italic, c: sp.color, h: sp.highlight })));
+  ({ t: sp.text, b: sp.bold, i: sp.italic, c: sp.color, h: sp.highlight, sup: sp.sup })));
 
 function sermonToJson(s, layout) {
   const t = theme();
@@ -60,7 +60,7 @@ function jsonToSermon(d) {
       point: !!p.point,
       manual: !!p.manual,
       paragraphs: (p.paragraphs || []).map((par) =>
-        par.filter((sp) => sp.t).map((sp) => span(sp.t, !!sp.b, !!sp.i, sp.c ?? null, sp.h ?? null))),
+        par.filter((sp) => sp.t).map((sp) => span(sp.t, !!sp.b, !!sp.i, sp.c ?? null, sp.h ?? null, !!sp.sup))),
     })),
   };
 }
@@ -92,7 +92,7 @@ export async function parseText(payload) {
   if (Array.isArray(payload.paragraphs)) {
     paragraphs = payload.paragraphs.map((par) => {
       const spans = par.filter((sp) => sp.t)
-        .map((sp) => span(sp.t, !!sp.b, !!sp.i, sp.c ?? null, sp.h ?? null));
+        .map((sp) => span(sp.t, !!sp.b, !!sp.i, sp.c ?? null, sp.h ?? null, !!sp.sup));
       return [spans.map((sp) => sp.text).join(""), spans];
     });
   } else if (typeof payload.text === "string") {

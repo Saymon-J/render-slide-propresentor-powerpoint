@@ -28,6 +28,10 @@ function toRuns(paragraphs, sizePt, baseBold, font, color, slideBg) {
         bold: !!(sp.bold || baseBold), italic: !!sp.italic,
         color: sp.color ? hex(adjustToBg(sp.color, slideBg)) : color,  // цвет темы, как у .pro
       };
+      if (sp.sup) {  // № стиха — мелкий надстрочный, ~2/3 кегля (как у .pro-RTF)
+        o.superscript = true;
+        o.fontSize = Math.max(8, Math.round(o.fontSize * 0.65));
+      }
       if (sp.highlight) o.highlight = hex(adjustToBg(sp.highlight, slideBg));
       items.push({ text: sp.text, options: { ...o, breakLine: j === para.length - 1 } });
     });

@@ -165,6 +165,7 @@
     line-height: 1.32; overflow: hidden;
   }
   .prev .bodybox p { margin: 0 0 .45em; }
+  .prev .bodybox sup { font-size: .62em; line-height: 0; }  /* № стиха — как дробь */
   .prev mark { background: #ffe100; color: #000; }
   .prev .empty { color: #9aa3b5; font-style: italic; }
   .prev:focus-within { outline: 1px solid var(--accent); }
@@ -298,7 +299,7 @@
       <span>отрывки из конспекта проповеди в готовую презентацию .pro или .pptx</span>
     </div>
   </div>
-  <span class="badge">v1.9.0 · ProPresenter 7 + PowerPoint</span>
+  <span class="badge">v1.10.0 · ProPresenter 7 + PowerPoint</span>
 </header>
 
 <main>
@@ -452,9 +453,11 @@
 
 <div class="toolbar hidden" id="toolbar">
   <span class="tip">Красная кнопка слева выключает слайд из экспорта · × удаляет · текст правится прямо в превью · перетащите карточку за заголовок, чтобы поменять порядок</span>
-  <label class="chk" id="numsWrap" title="Номера стихов в тексте отрывка">
-    <input type="checkbox" id="numsChk"> Номера стихов
-  </label>
+  <div class="seg" id="numsSeg" title="Номера стихов в тексте отрывка">
+    <button type="button" data-n="sup" title="Мелкие надстрочные номера — текст читается легче">№ ¹²³</button>
+    <button type="button" data-n="plain" title="Номера как в конспекте">№ 123</button>
+    <button type="button" data-n="hide" title="Убрать номера стихов из текста">без №</button>
+  </div>
   <label class="chk hidden" id="pointsWrap" title="Слайды-заголовки пунктов конспекта: «1.», «II», «Пункт 1»">
     <input type="checkbox" id="pointsChk"> Пункты
   </label>
@@ -517,13 +520,24 @@ let state = { title: "", passages: [] };
 let addMode = false; // режим добавления: новые отрывки — в конец списка
 let layout = localStorage.getItem("layout") || "flow"; // flow | lines
 let pointsOn = localStorage.getItem("ppPoints") === "1"; // слайды-пункты конспекта
-let verseNums = localStorage.getItem("ppVerseNums") !== "0"; // номера стихов в теле
+// номера стихов в теле: sup — мелкие надстрочные, plain — как в тексте, hide — снять
+let numsMode = localStorage.getItem("ppVerseNums") || "sup";
+if (numsMode === "1") numsMode = "sup";   // старый формат галочки: включены → надстрочные
+if (numsMode === "0") numsMode = "hide";
+// превью/экспорт идут по режиму: без № — копия без номеров, ¹²³ — копия с sup-спанами
+const shownParas = (paras) => numsMode === "hide" ? api.stripVerseNumbers(paras)
+  : numsMode === "sup" ? api.superscriptVerseNumbers(paras) : paras;
 
-const numsChk = $("#numsChk");
-numsChk.checked = verseNums;
-numsChk.onchange = () => {
-  verseNums = numsChk.checked;
-  localStorage.setItem("ppVerseNums", verseNums ? "1" : "0");
+const numsSeg = $("#numsSeg");
+const setNumsSeg = () => numsSeg.querySelectorAll("button")
+  .forEach((b) => b.classList.toggle("on", b.dataset.n === numsMode));
+setNumsSeg();
+numsSeg.onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.dataset.n === numsMode) return;
+  numsMode = b.dataset.n;
+  localStorage.setItem("ppVerseNums", numsMode);
+  setNumsSeg();
   render();
 };
 
@@ -903,10 +917,11 @@ $("#themeDel").onclick = async () => {
   refreshThemeSel();
 };
 
-/* превью-слайд: спаны → HTML (жирный/курсив/цвет/маркер) */
+/* превью-слайд: спаны → HTML (жирный/курсив/цвет/маркер/№ стиха) */
 function spansToHtml(spans) {
   return spans.map((s) => {
     let t = document.createTextNode(s.t).textContent;
+    if (s.sup) t = "<sup>" + t + "</sup>";
     if (s.i) t = "<i>" + t + "</i>";
     if (s.b) t = "<b>" + t + "</b>";
     if (s.h) t = "<mark>" + t + "</mark>";
@@ -1039,8 +1054,8 @@ function render() {
       body.style.fontFamily = `'${api.displayFont(th.body_font)}', Arial, sans-serif`;
       body.style.fontSize = `${(th.body_size / 10.8).toFixed(2)}cqh`;
       body.style.color = "#" + th.body_color;
-      // номера стихов выключены — превью и правки идут без номеров (WYSIWYG)
-      const shown = verseNums ? p.paragraphs : api.stripVerseNumbers(p.paragraphs);
+      // превью и правки идут в текущем режиме номеров (WYSIWYG)
+      const shown = shownParas(p.paragraphs);
       body.innerHTML = shown.map((par) => "<p>" + (spansToHtml(par) || "<span class='empty'>— пусто —</span>") + "</p>").join("");
       body.onblur = () => { p.paragraphs = readEditable(body); saveState(); };
       prev.append(ref, body);
@@ -1064,20 +1079,21 @@ function readEditable(el) {
     const walk = (node, fmt) => {
       node.childNodes.forEach((ch) => {
         if (ch.nodeType === 3) {
-          if (ch.nodeValue) spans.push({ t: ch.nodeValue.replace(/[\r\n\t]+/g, " "), b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+          if (ch.nodeValue) spans.push({ t: ch.nodeValue.replace(/[\r\n\t]+/g, " "), b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h, sup: fmt.sup || undefined });
         } else if (ch.tagName === "BR") {
-          spans.push({ t: "\n", b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h });
+          spans.push({ t: "\n", b: fmt.b, i: fmt.i, c: fmt.c, h: fmt.h, sup: fmt.sup || undefined });
         } else {
           const f = { ...fmt };
           if (ch.tagName === "B" || ch.tagName === "STRONG") f.b = true;
           if (ch.tagName === "I" || ch.tagName === "EM") f.i = true;
           if (ch.tagName === "MARK") f.h = "FFFF00";
+          if (ch.tagName === "SUP") f.sup = true;
           if (ch.tagName === "SPAN" && ch.style.color) f.c = ch.style.color.slice(1).toUpperCase();
           walk(ch, f);
         }
       });
     };
-    walk(p, { b: false, i: false, c: null, h: null });
+    walk(p, { b: false, i: false, c: null, h: null, sup: false });
     if (spans.length) out.push(spans);
   });
   return out.length ? out : [[]];
@@ -1111,7 +1127,7 @@ async function doExport(fmt) {
   const payload = { title: $("#titleInput").value, format: fmt,
                     passages: state.passages
                       .filter((p) => p.on !== false && (pointsOn || !p.point || p.manual))
-                      .map((p) => (verseNums || p.point ? p : { ...p, paragraphs: api.stripVerseNumbers(p.paragraphs) })),
+                      .map((p) => (p.point ? p : { ...p, paragraphs: shownParas(p.paragraphs) })),
                     theme: pickTheme(api.currentTheme()) };
   const fname = (payload.title || "Проповедь").replace(/[\\/:*?"<>|]/g, "").trim() + "." + fmt;
   try {

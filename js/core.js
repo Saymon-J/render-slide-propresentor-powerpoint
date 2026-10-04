@@ -13,9 +13,9 @@ export const WD_HL = {
   YELLOW: "FFFF00",
 };
 
-// Span — plain-объект {text, bold, italic, color, highlight}
-export const span = (text, bold = false, italic = false, color = null, highlight = null) =>
-  ({ text, bold, italic, color, highlight });
+// Span — plain-объект {text, bold, italic, color, highlight, sup}
+export const span = (text, bold = false, italic = false, color = null, highlight = null, sup = false) =>
+  ({ text, bold, italic, color, highlight, sup });
 export const passage = (screen, label, paragraphs = [], point = false) =>
   ({ screen, label, paragraphs, point });
 export const sermon = (title, passages = []) => ({ title, passages });
@@ -49,7 +49,8 @@ export function mergeSpans(spans) {
     if (!sp.text) continue;
     const last = out[out.length - 1];
     if (last && last.bold === sp.bold && last.italic === sp.italic
-        && last.color === sp.color && last.highlight === sp.highlight) {
+        && last.color === sp.color && last.highlight === sp.highlight
+        && last.sup === sp.sup) {
       last.text += sp.text;
     } else out.push({ ...sp });
   }
@@ -353,6 +354,43 @@ export function stripVerseNumbers(paragraphs) {
   });
 }
 
+// номер стиха к подъёму: те же позиции, что у снятия (NUM_LEAD/NUM_INLINE)
+const SUP_LEAD = /^(\s*)(\d{1,3})(?=\s|$)/;
+const SUP_INL = /((?<=[.,;:!?»])\s+(?:—\s+)?)(\d{1,3})(?=\s)/g;
+
+export function superscriptVerseNumbers(paragraphs) {
+  // Номера стихов — мелкими надстрочными (как дроби/сноски), текст читается
+  // легче — режим «¹²³» в UI. Номер выносится отдельным спаном с sup:true;
+  // возвращает копию, уже размеченные спаны не трогает (идемпотентно).
+  // Понимает оба формата спанов: ядра {text,…} и UI/JSON {t,b,i,c,h}.
+  return paragraphs.map((par) => {
+    const out = [];
+    for (const sp of par) {
+      if (sp.sup) { out.push({ ...sp }); continue; }
+      const key = sp.text !== undefined ? "text" : "t";
+      let rest = sp.text ?? sp.t ?? "";
+      if (!rest.trim()) continue;
+      const prev = out.length ? (out[out.length - 1].text ?? out[out.length - 1].t) : null;
+      const afterPunct = prev !== null && /[.,;:!?»]\s*$/.test(prev);
+      const push = (t, sup) => {
+        if (t) out.push(sup ? { ...sp, [key]: t, sup: true } : { ...sp, [key]: t });
+      };
+      if (!out.length || afterPunct) {
+        const m = SUP_LEAD.exec(rest);
+        if (m) { push(m[1]); push(m[2], true); rest = rest.slice(m[0].length); }
+      }
+      let last = 0;
+      for (const m of rest.matchAll(SUP_INL)) {
+        push(rest.slice(last, m.index + m[1].length));  // знак пунктуации и пробел/тире — обычным текстом
+        push(m[2], true);
+        last = m.index + m[0].length;
+      }
+      push(rest.slice(last));
+    }
+    return out;
+  });
+}
+
 // ---------- RTF (export.py) ----------
 
 function esc(text) {
@@ -401,6 +439,7 @@ export function buildRtf(paragraphs, sizePt, align = "left", baseBold = false, f
   };
 
   const fs = sizePt * 2;
+  const supFs = Math.max(12, Math.round(fs * 0.65));  // № стиха — ~2/3 кегля тела
   const par = "\\pard\\li0\\fi0\\ri0\\" + (align === "center" ? "qc" : "ql");
   // пробел в конце head и после каждой числовой команды — обязательный
   // разделитель RTF: «\b1» + текст «2-…» иначе склеивается в «\b12» и ест цифру
@@ -411,7 +450,7 @@ export function buildRtf(paragraphs, sizePt, align = "left", baseBold = false, f
   const body = [];
   paragraphs.forEach((para, pi) => {
     const seg = [`${par}${head}`];
-    const cur = { b: false, i: false, cf: 1, hl: 0 };
+    const cur = { b: false, i: false, cf: 1, hl: 0, sup: false };
     for (const sp of para) {
       const b = sp.bold || baseBold, i = sp.italic;
       const cf = cfId(sp), hl = hlId(sp);
@@ -419,6 +458,10 @@ export function buildRtf(paragraphs, sizePt, align = "left", baseBold = false, f
       if (i !== cur.i) { seg.push(`\\i${i ? 1 : 0} `); cur.i = i; }
       if (cf !== cur.cf) { seg.push(`\\cf${cf} `); cur.cf = cf; }
       if (hl !== cur.hl) { seg.push(`\\highlight${hl}\\cb${hl} `); cur.hl = hl; }
+      if (!!sp.sup !== cur.sup) {  // № стиха: \super поднимает, мельчит свой \fs
+        seg.push(sp.sup ? `\\super\\fs${supFs} ` : `\\nosupersub\\fs${fs} `);
+        cur.sup = !!sp.sup;
+      }
       seg.push(esc(sp.text));
     }
     if (pi < paragraphs.length - 1) seg.push("\\par");
